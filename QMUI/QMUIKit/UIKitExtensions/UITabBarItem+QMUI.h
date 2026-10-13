@@ -27,9 +27,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, nullable) void (^qmui_doubleTapBlock)(UITabBarItem *tabBarItem, NSInteger index);
 
 /**
- * 获取一个UITabBarItem内显示图标的UIImageView，如果找不到则返回nil
+ * 获取 UITabBarItem 当前状态的图标视图，需在 TabBar 完成布局后调用，找不到则返回 nil。
+ * iOS 26 的液态 TabBar 有普通、选中两套图标，选中时返回选中副本；切换状态后应重新获取，不要缓存。
+ * 获取业务原图请使用 image / selectedImage；本接口返回的视图和图片可能由系统重新创建或配置。
  */
 - (nullable UIImageView *)qmui_imageView;
+/// 仅在传入按钮的子视图中查找图标，不跨到液态 TabBar 的另一套按钮。
 + (nullable UIImageView *)qmui_imageViewInTabBarButton:(nullable UIView *)tabBarButton;
 
 @end

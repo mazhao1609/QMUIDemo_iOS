@@ -76,7 +76,7 @@ QMUISynthesizeIdCopyProperty(qmui_setSelectedBlock, setQmui_setSelectedBlock)
         } else {
             ExtendImplementationOfVoidMethodWithoutArguments([UITableViewCell class], @selector(layoutSubviews), ^(UITableViewCell *selfObject) {
                 if ([selfObject.accessoryView isKindOfClass:[UIButton class]]) {
-                    CGFloat defaultRightMargin = 15 + SafeAreaInsetsConstantForDeviceWithNotch.right;
+                    CGFloat defaultRightMargin = 15 + SafeAreaInsetsForView(selfObject).right;
                     selfObject.accessoryView.qmui_left = selfObject.qmui_width - defaultRightMargin - selfObject.accessoryView.qmui_width;
                     selfObject.accessoryView.qmui_top = CGRectGetMinYVerticallyCenterInParentRect(selfObject.frame, selfObject.accessoryView.frame);;
                     selfObject.contentView.qmui_right = selfObject.accessoryView.qmui_left;
@@ -252,14 +252,15 @@ static char kAssociatedObjectKey_selectedBackgroundColor;
         if (self.editingAccessoryView) {
             return self.editingAccessoryView;
         }
-        return [self qmui_valueForKey:@"_editingAccessoryView"];
+        return [self qmui_canGetValueForKey:@"_editingAccessoryView"] ? [self qmui_valueForKey:@"_editingAccessoryView"] : nil;
     }
     if (self.accessoryView) {
         return self.accessoryView;
     }
     
     // UITableViewCellAccessoryDetailDisclosureButton 在 iOS 13 及以上是分开的两个 accessoryView，以 NSSet 的形式存在这个私有接口里。而 iOS 12 及以下是以一个 UITableViewCellDetailDisclosureView 的 UIControl 存在。
-    NSSet<UIView *> *accessoryViews = [self qmui_valueForKey:@"_existingSystemAccessoryViews"];
+    NSSet<UIView *> *accessoryViews = [self qmui_canGetValueForKey:@"_existingSystemAccessoryViews"] ? [self qmui_valueForKey:@"_existingSystemAccessoryViews"] : nil;
+    if (![accessoryViews isKindOfClass:NSSet.class]) return nil;
     if ([accessoryViews isKindOfClass:NSSet.class] && accessoryViews.count) {
         UIView *leftView = nil;
         for (UIView *accessoryView in accessoryViews) {

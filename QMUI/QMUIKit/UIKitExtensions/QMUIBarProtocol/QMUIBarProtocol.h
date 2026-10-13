@@ -46,13 +46,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nullable, nonatomic, strong, readonly) NSArray<UIVisualEffectView *> *qmui_effectViews;
 
 /**
- 允许直接指定 tab 具体的磨砂样式（系统的仅在 iOS 13 及以后用 UINavigation(Tab)BarAppearance.backgroundEffects 才可以实现）。默认为 nil，如果你没设置过这个属性，那么 nil 的行为就是维持系统的样式，但如果你主动设置过这个属性，那么后续的 nil 则表示把磨砂清空（也即可能出现背景透明的 bar）。
+ 通过公开 UINavigationBarAppearance / UITabBarAppearance.backgroundEffect 指定磨砂样式。默认为 nil，如果你没设置过这个属性，那么 nil 的行为就是维持系统的样式，但如果你主动设置过这个属性，那么后续的 nil 则表示把磨砂清空（也即可能出现背景透明的 bar）。
  @note 生效的前提是 backgroundImage、barTintColor 都为空，因为这两者的优先级都比磨砂高。
  */
 @property(nullable, nonatomic, strong) UIBlurEffect *qmui_effect;
 
 /**
- 当 tabBar 展示磨砂的样式时，可以通过这个属性精准指定磨砂的前景色（可参考 CALayer(QMUI).qmui_foregroundColor），因为系统的某些 UIBlurEffectStyle 会自带前景色，且不可去掉，那种情况下你就无法得到准确的自定义前景色了（即便你试图通过设置半透明的 barTintColor 来达到前景色的效果，那也依然会叠加一层系统自带的半透明前景色）。
+ 通过公开 appearance.backgroundColor 指定背景色，最终效果由 UIKit 合成。不会隐藏或修改系统内部效果视图。
  */
 @property(nullable, nonatomic, strong) UIColor *qmui_effectForegroundColor;
 

@@ -36,7 +36,7 @@ const NSTimeInterval QMUIDropdownNotificationDurationInfinite = -1;
         self.canHide = YES;
         __weak __typeof(self)weakSelf = self;
         self.layoutMarginsBlock = ^UIEdgeInsets{
-            CGFloat top = MAX(10, CGRectGetMaxY(UIApplication.sharedApplication.statusBarFrame));
+            CGFloat top = MAX(10, CGRectGetMaxY(QMUIHelper.keyWindow.windowScene.statusBarManager.statusBarFrame));
             CGFloat horizontal = 10;
             BOOL isPhone = CGRectGetWidth(weakSelf.modalPresentationViewController.window.bounds) / CGRectGetHeight(weakSelf.modalPresentationViewController.window.bounds) < 320.0 / 480.0;
             if (!isPhone) {
@@ -70,7 +70,7 @@ const NSTimeInterval QMUIDropdownNotificationDurationInfinite = -1;
             CGFloat width = CGRectGetWidth(containerBounds) - UIEdgeInsetsGetHorizontalValue(margins);
             weakSelf.view.qmui_frameApplyTransform = CGRectMake(margins.left, margins.top, width, CGRectGetHeight(contentViewDefaultFrame));
         } else {
-            weakSelf.view.qmui_frameApplyTransform = CGRectSetY(contentViewDefaultFrame, CGRectGetMaxY(UIApplication.sharedApplication.statusBarFrame));
+            weakSelf.view.qmui_frameApplyTransform = CGRectSetY(contentViewDefaultFrame, CGRectGetMaxY(QMUIHelper.keyWindow.windowScene.statusBarManager.statusBarFrame));
         }
     };
     self.modalPresentationViewController.showingAnimation = ^(UIView * _Nullable dimmingView, CGRect containerBounds, CGFloat keyboardHeight, CGRect contentViewFrame, void (^ _Nonnull completion)(BOOL)) {

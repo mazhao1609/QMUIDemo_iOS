@@ -25,6 +25,7 @@
 #import "UINavigationBar+QMUIBarProtocol.h"
 #import "UIView+QMUI.h"
 #import "QMUILog.h"
+#import "NSObject+QMUI.h"
 
 /**
  *  为了响应<b>NavigationBarTransition</b>分类的功能，UIViewController需要做一些相应的支持。
@@ -43,6 +44,146 @@
 /// 原始containerView的背景色
 @property(nonatomic, strong) UIColor *originContainerViewBackgroundColor;
 
+/// iOS 26 保留页面 appearance，背景转场单独处理，不复制玻璃导航栏。
+- (void)qmuinb_updateNavigationItemAppearanceForNavigationController:(UINavigationController *)navigationController;
+- (void)renderNavigationBarAppearanceAnimated:(BOOL)animated;
+- (BOOL)canCustomNavigationBarTransitionIfBarHiddenable;
+- (BOOL)hideNavigationBarWhenTransitioning;
+
+@end
+
+/// 只绘制背景，标题、按钮、玻璃控件和返回手势仍由真正的导航栏负责。
+@interface _QMUITransitionNavigationBackground : UIView
+@property(nonatomic, strong) UINavigationBarAppearance *appearance;
+@property(nonatomic, strong) UIVisualEffectView *effectView;
+@property(nonatomic, strong) UIView *colorView;
+@property(nonatomic, strong) UIImageView *imageView;
+@property(nonatomic, strong) UIImageView *shadowView;
+@end
+
+@implementation _QMUITransitionNavigationBackground
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        self.userInteractionEnabled = NO;
+        self.effectView = [[UIVisualEffectView alloc] initWithEffect:nil];
+        self.colorView = UIView.new;
+        self.imageView = UIImageView.new;
+        self.shadowView = UIImageView.new;
+        [self addSubview:self.effectView];
+        [self addSubview:self.colorView];
+        [self addSubview:self.imageView];
+        [self addSubview:self.shadowView];
+    }
+    return self;
+}
+- (void)setAppearance:(UINavigationBarAppearance *)appearance {
+    if ([_appearance isEqual:appearance]) return;
+    _appearance = [appearance copy];
+    // 在加入动画容器前准备材料，避免 effect 从 nil 动画到磨砂产生白闪。
+    [UIView performWithoutAnimation:^{
+        if (![self.effectView.effect isEqual:appearance.backgroundEffect]) self.effectView.effect = appearance.backgroundEffect;
+        self.colorView.backgroundColor = appearance.backgroundColor;
+        self.imageView.image = appearance.backgroundImage;
+        self.imageView.contentMode = appearance.backgroundImageContentMode;
+        self.shadowView.image = appearance.shadowImage;
+        self.shadowView.backgroundColor = appearance.shadowImage ? nil : appearance.shadowColor;
+        [self setNeedsLayout];
+    }];
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.effectView.frame = self.bounds;
+    self.colorView.frame = self.bounds;
+    self.imageView.frame = self.bounds;
+    CGFloat shadowHeight = self.shadowView.image ? self.shadowView.image.size.height : PixelOne;
+    self.shadowView.frame = CGRectMake(0, CGRectGetHeight(self.bounds) - shadowHeight, CGRectGetWidth(self.bounds), shadowHeight);
+}
+@end
+
+/// 生命周期覆盖 push、pop、set 以及交互返回取消；仅在不同背景转场时创建。
+@interface _QMUINavigationBackgroundTransition : NSObject
+@property(nonatomic, weak) UINavigationController *navigationController;
+@property(nonatomic, weak) UIViewController *fromViewController;
+@property(nonatomic, weak) UIViewController *toViewController;
+@property(nonatomic, strong) _QMUITransitionNavigationBackground *fromBackground;
+@property(nonatomic, strong) _QMUITransitionNavigationBackground *toBackground;
+@property(nonatomic, weak) UIView *systemBackground;
+@property(nonatomic, strong) CALayer *originalMask;
+@property(nonatomic, strong) CALayer *hiddenMask;
+@property(nonatomic, assign) BOOL originalBarHidden;
+- (void)updateLayout;
+- (void)finish;
+@end
+
+static NSString *const QMUINavigationBackgroundTransitionKey = @"qmuinb_backgroundTransition";
+
+/// 与页面顶部关联的纵向滚动区域，用于选择独立的 scrollEdge appearance。
+static UIScrollView *QMUINavigationTransitionScrollView(UIView *view) {
+    if (view.hidden || view.alpha <= 0.01) return nil;
+    if ([view isKindOfClass:UIScrollView.class]) {
+        UIScrollView *scrollView = (id)view;
+        if (scrollView.alwaysBounceVertical || scrollView.contentSize.height + scrollView.adjustedContentInset.top + scrollView.adjustedContentInset.bottom > CGRectGetHeight(scrollView.bounds)) return scrollView;
+    }
+    for (UIView *subview in view.subviews) {
+        UIScrollView *scrollView = QMUINavigationTransitionScrollView(subview);
+        if (scrollView) return scrollView;
+    }
+    return nil;
+}
+
+@implementation _QMUINavigationBackgroundTransition
+- (void)updateLayout {
+    UINavigationController *nav = self.navigationController;
+    UIViewController *from = self.fromViewController;
+    UIViewController *to = self.toViewController;
+    if (!nav || !from || !to) return;
+    UINavigationBar *bar = nav.navigationBar;
+    UIView *systemBackground = bar.qmui_backgroundView;
+    if (!systemBackground) return;
+    if (self.systemBackground != systemBackground) {
+        if (self.systemBackground.layer.mask == self.hiddenMask) self.systemBackground.layer.mask = self.originalMask;
+        self.systemBackground = systemBackground;
+        self.originalMask = systemBackground.layer.mask;
+    }
+    if (!self.hiddenMask) self.hiddenMask = CALayer.new;
+    // 只遮住背景容器，不触碰 iOS 26 的按钮玻璃层和内容层。
+    systemBackground.layer.mask = self.hiddenMask;
+    CGRect rect = [nav.view convertRect:systemBackground.bounds fromView:systemBackground];
+    NSArray<UIViewController *> *pages = @[from, to];
+    NSArray<_QMUITransitionNavigationBackground *> *backgrounds = @[self.fromBackground, self.toBackground];
+    for (NSUInteger index = 0; index < pages.count; index++) {
+        UIViewController *page = pages[index];
+        _QMUITransitionNavigationBackground *background = backgrounds[index];
+        // 横坐标固定在各页自身，不能 convert 后跟着共享导航栏停留在屏幕原地。
+        CGPoint origin = [page.view convertPoint:rect.origin fromView:nav.view];
+        background.frame = CGRectMake(CGRectGetMinX(page.view.bounds), origin.y, CGRectGetWidth(page.view.bounds), CGRectGetHeight(rect));
+        // 目标页隐藏共享 bar 时，原页背景仍须随原页退出。
+        background.hidden = [page canCustomNavigationBarTransitionIfBarHiddenable] ? [page hideNavigationBarWhenTransitioning] : self.originalBarHidden;
+        UINavigationBarAppearance *appearance = page.navigationItem.standardAppearance ?: bar.standardAppearance;
+        BOOL compact = CGRectGetHeight(bar.bounds) < 44;
+        if (compact) appearance = page.navigationItem.compactAppearance ?: bar.compactAppearance ?: appearance;
+        UIScrollView *scrollView = QMUINavigationTransitionScrollView(page.view);
+        if (scrollView && scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top + PixelOne) {
+            UINavigationBarAppearance *edge = compact ? page.navigationItem.compactScrollEdgeAppearance ?: bar.compactScrollEdgeAppearance : page.navigationItem.scrollEdgeAppearance ?: bar.scrollEdgeAppearance;
+            if (!edge && compact) edge = page.navigationItem.scrollEdgeAppearance ?: bar.scrollEdgeAppearance;
+            if (!edge) {
+                edge = [appearance copy];
+                [edge configureWithTransparentBackground];
+            }
+            appearance = edge;
+        }
+        background.appearance = appearance;
+        [page.view bringSubviewToFront:background];
+        [background layoutIfNeeded];
+    }
+}
+- (void)finish {
+    [UIView performWithoutAnimation:^{
+        if (self.systemBackground.layer.mask == self.hiddenMask) self.systemBackground.layer.mask = self.originalMask;
+        [self.fromBackground removeFromSuperview];
+        [self.toBackground removeFromSuperview];
+    }];
+}
 @end
 
 @interface UILabel (NavigationBarTransition)
@@ -79,14 +220,25 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
 
 /// 获取系统自带的返回按钮 Label，如果在转场时，会获取到最上面控制器的。
 - (UILabel *)qmui_backButtonLabel {
-    __block UILabel *backButtonLabel = nil;
-    [self.qmui_contentView.subviews enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(__kindof UIView * _Nonnull subview, NSUInteger idx, BOOL * _Nonnull stop) {
-        if ([subview isKindOfClass:NSClassFromString(@"_UIButtonBarButton")]) {
-            UIButton *titleButton = [subview valueForKeyPath:@"visualProvider.titleButton"];
-            backButtonLabel = titleButton.titleLabel;
-            *stop = YES;
+    // 玻璃导航栏的返回标签由系统管理，不对其内部视图施加旧版转场样式。
+    if (@available(iOS 26.0, *)) return nil;
+    UILabel *backButtonLabel = nil;
+    NSMutableArray<UIView *> *pendingViews = self.qmui_contentView.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < pendingViews.count; index++) {
+        UIView *view = pendingViews[index];
+        if ([NSStringFromClass(view.class) isEqualToString:@"_UIButtonBarButton"]) {
+            NSMutableArray<UIView *> *buttonViews = view.subviews.mutableCopy;
+            for (NSUInteger buttonIndex = 0; buttonIndex < buttonViews.count; buttonIndex++) {
+                UIView *buttonView = buttonViews[buttonIndex];
+                if ([buttonView isKindOfClass:UIButton.class]) {
+                    backButtonLabel = ((UIButton *)buttonView).titleLabel;
+                    break;
+                }
+                [buttonViews addObjectsFromArray:buttonView.subviews];
+            }
         }
-    }];
+        [pendingViews addObjectsFromArray:view.subviews];
+    }
     return backButtonLabel;
 }
 
@@ -104,6 +256,38 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
         ExtendImplementationOfVoidMethodWithoutArguments([UINavigationController class], @selector(qmui_didInitialize), ^(UINavigationController *selfObject) {
             [selfObject qmui_addNavigationActionDidChangeBlock:^(QMUINavigationAction action, BOOL animated, __kindof UINavigationController * _Nullable weakNavigationController, __kindof UIViewController * _Nullable appearingViewController, NSArray<__kindof UIViewController *> * _Nullable disappearingViewControllers) {
                 
+                if (@available(iOS 26.0, *)) {
+                    // 必须早于 UIKit 的 push/pop/set，保证转场捕获的是两页各自的样式。
+                    if (action == QMUINavigationActionWillPush || action == QMUINavigationActionWillPop || action == QMUINavigationActionWillSet) {
+                        UIViewController *from = weakNavigationController.topViewController;
+                        [from qmuinb_updateNavigationItemAppearanceForNavigationController:weakNavigationController];
+                        [appearingViewController qmuinb_updateNavigationItemAppearanceForNavigationController:weakNavigationController];
+                        UINavigationControllerOperation operation = action == QMUINavigationActionWillPop ? UINavigationControllerOperationPop : action == QMUINavigationActionWillSet ? weakNavigationController.qmui_lastOperation : UINavigationControllerOperationPush;
+                        if (animated && from && appearingViewController && weakNavigationController.view.window &&
+                            [weakNavigationController shouldCustomTransitionAutomaticallyForOperation:operation firstViewController:from secondViewController:appearingViewController] && weakNavigationController.navigationBar.qmui_backgroundView) {
+                            [appearingViewController loadViewIfNeeded];
+                            _QMUINavigationBackgroundTransition *transition = _QMUINavigationBackgroundTransition.new;
+                            transition.navigationController = weakNavigationController;
+                            transition.fromViewController = from;
+                            transition.toViewController = appearingViewController;
+                            transition.originalBarHidden = weakNavigationController.navigationBarHidden;
+                            transition.fromBackground = _QMUITransitionNavigationBackground.new;
+                            transition.toBackground = _QMUITransitionNavigationBackground.new;
+                            [from.view addSubview:transition.fromBackground];
+                            [appearingViewController.view addSubview:transition.toBackground];
+                            [weakNavigationController.navigationBar qmui_bindObject:transition forKey:QMUINavigationBackgroundTransitionKey];
+                            [transition updateLayout];
+                        }
+                    } else if (action == QMUINavigationActionPushCompleted || action == QMUINavigationActionPopCompleted || action == QMUINavigationActionSetCompleted) {
+                        _QMUINavigationBackgroundTransition *transition = [weakNavigationController.navigationBar qmui_getBoundObjectForKey:QMUINavigationBackgroundTransitionKey];
+                        // 取消后 top 已恢复为原页，同步按钮颜色，不能遗留目标页颜色。
+                        if (transition) [weakNavigationController.topViewController renderNavigationBarAppearanceAnimated:NO];
+                        [transition finish];
+                        [weakNavigationController.navigationBar qmui_bindObject:nil forKey:QMUINavigationBackgroundTransitionKey];
+                    }
+                    return;
+                }
+
                 // 左右两个界面都必须存在
                 UIViewController *disappearingViewController = disappearingViewControllers.lastObject;
                 if (!appearingViewController || !disappearingViewController) {
@@ -139,6 +323,17 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
                 }
             }];
         });
+
+        if (@available(iOS 26.0, *)) {
+            ExtendImplementationOfVoidMethodWithoutArguments(UINavigationBar.class, @selector(layoutSubviews), ^(UINavigationBar *bar) {
+                _QMUINavigationBackgroundTransition *transition = [bar qmui_getBoundObjectForKey:QMUINavigationBackgroundTransitionKey];
+                [transition updateLayout];
+            });
+            ExtendImplementationOfVoidMethodWithoutArguments(UIViewController.class, @selector(viewDidLayoutSubviews), ^(UIViewController *vc) {
+                _QMUINavigationBackgroundTransition *transition = [vc.navigationController.navigationBar qmui_getBoundObjectForKey:QMUINavigationBackgroundTransitionKey];
+                if (vc == transition.fromViewController || vc == transition.toViewController) [transition updateLayout];
+            });
+        }
         
         OverrideImplementation([UINavigationController class], @selector(setNavigationBarHidden:animated:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(UINavigationController *selfObject, BOOL hidden, BOOL animated) {
@@ -297,7 +492,9 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     
     // 仅当导航栏被添加到 window 之后（UIAppearance 被应用之后），业务才可以设置导航栏的样式，否则在 UINavigationBar (QMUI) 里获取到的 navigationBar.standardAppearance 是系统默认的样式而不是 App 全局配置的样式，导致后续导航栏样式都是错的。
     // https://github.com/Tencent/QMUI_iOS/issues/1437
-    if (@available(iOS 15.0, *)) {
+    if (@available(iOS 26.0, *)) {
+        // 页面 appearance 可在加入 window 前配置，避免首帧显示上一页或系统默认样式。
+    } else if (@available(iOS 15.0, *)) {
         if (!navigationController.navigationBar.window) {
             return;
         }
@@ -321,36 +518,45 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     // 以下用于控制 vc 的外观样式，如果某个方法有实现则用方法的返回值，否则再看配置表对应的值是否有配置，有配置就使用配置表，没配置则什么都不做，维持系统原生样式
     UIViewController<QMUINavigationControllerAppearanceDelegate> *vc = (UIViewController<QMUINavigationControllerAppearanceDelegate> *)self;
     UINavigationController *navigationController = vc.navigationController;
-    
-    // 导航栏的背景色
-    if ([vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)]) {
-        UIColor *barTintColor = [vc qmui_navigationBarBarTintColor];
-        navigationController.navigationBar.barTintColor = barTintColor;
-    } else if (QMUICMIActivated) {
-        navigationController.navigationBar.barTintColor = UINavigationBar.qmui_appearanceConfigured.barTintColor;
+
+    BOOL usesNavigationItemAppearance = NO;
+    if (@available(iOS 26.0, *)) {
+        usesNavigationItemAppearance = YES;
+        [self qmuinb_updateNavigationItemAppearanceForNavigationController:navigationController];
     }
+
+    if (!usesNavigationItemAppearance) {
     
-    // 导航栏的背景
-    if ([vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)]) {
-        UIImage *backgroundImage = [vc qmui_navigationBarBackgroundImage];
-        [navigationController.navigationBar setBackgroundImage:backgroundImage forBarMetrics:UIBarMetricsDefault];
-    } else if (QMUICMIActivated) {
-        [navigationController.navigationBar setBackgroundImage:[UINavigationBar.qmui_appearanceConfigured backgroundImageForBarMetrics:UIBarMetricsDefault] forBarMetrics:UIBarMetricsDefault];
-    }
+        // 导航栏的背景色
+        if ([vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)]) {
+            UIColor *barTintColor = [vc qmui_navigationBarBarTintColor];
+            navigationController.navigationBar.barTintColor = barTintColor;
+        } else if (QMUICMIActivated) {
+            navigationController.navigationBar.barTintColor = UINavigationBar.qmui_appearanceConfigured.barTintColor;
+        }
     
-    //  导航栏的 style
-    if ([vc respondsToSelector:@selector(qmui_navigationBarStyle)]) {
-        UIBarStyle barStyle = [vc qmui_navigationBarStyle];
-        navigationController.navigationBar.barStyle = barStyle;
-    } else if (QMUICMIActivated) {
-        navigationController.navigationBar.barStyle = UINavigationBar.qmui_appearanceConfigured.barStyle;
-    }
+        // 导航栏的背景
+        if ([vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)]) {
+            UIImage *backgroundImage = [vc qmui_navigationBarBackgroundImage];
+            [navigationController.navigationBar setBackgroundImage:backgroundImage forBarMetrics:UIBarMetricsDefault];
+        } else if (QMUICMIActivated) {
+            [navigationController.navigationBar setBackgroundImage:[UINavigationBar.qmui_appearanceConfigured backgroundImageForBarMetrics:UIBarMetricsDefault] forBarMetrics:UIBarMetricsDefault];
+        }
     
-    // 导航栏底部的分隔线
-    if ([vc respondsToSelector:@selector(qmui_navigationBarShadowImage)]) {
-        navigationController.navigationBar.shadowImage = [vc qmui_navigationBarShadowImage];
-    } else if (QMUICMIActivated) {
-        navigationController.navigationBar.shadowImage = NavBarShadowImage;
+        //  导航栏的 style
+        if ([vc respondsToSelector:@selector(qmui_navigationBarStyle)]) {
+            UIBarStyle barStyle = [vc qmui_navigationBarStyle];
+            navigationController.navigationBar.barStyle = barStyle;
+        } else if (QMUICMIActivated) {
+            navigationController.navigationBar.barStyle = UINavigationBar.qmui_appearanceConfigured.barStyle;
+        }
+
+        // 导航栏底部的分隔线
+        if ([vc respondsToSelector:@selector(qmui_navigationBarShadowImage)]) {
+            navigationController.navigationBar.shadowImage = [vc qmui_navigationBarShadowImage];
+        } else if (QMUICMIActivated) {
+            navigationController.navigationBar.shadowImage = NavBarShadowImage;
+        }
     }
     
     // 导航栏上控件的主题色
@@ -379,7 +585,101 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     // iOS 13 及以上，title 的更新只在 viewWillAppear 这里进行就可以了，但 iOS 12 及以下还要靠 popViewController 那边
     // iOS 12 及以下系统，在不使用自定义 titleView 的情况下，在 viewWillAppear 时通过修改 navigationBar.titleTextAttributes 来设置新界面的导航栏标题样式，push 时是生效的，但 pop 时右边界面的样式会覆盖左边界面的样式，所以 pop 时的 titleTextAttributes 改为在 did pop 时处理
     // 如果用自定义 titleView 则没这种问题，只是为了代码简单，时机的选择不区分是否自定义 title
-    [vc renderNavigationBarTitleAppearanceAnimated:animated];
+    if (!usesNavigationItemAppearance) {
+        [vc renderNavigationBarTitleAppearanceAnimated:animated];
+    }
+}
+
+// 基于公开的页面 appearance 一次写入完整样式，不逐项修改共享导航栏。
+- (void)qmuinb_updateNavigationItemAppearanceForNavigationController:(UINavigationController *)navigationController {
+    if (![self conformsToProtocol:@protocol(QMUINavigationControllerAppearanceDelegate)] || !navigationController) return;
+    UIViewController<QMUINavigationControllerAppearanceDelegate> *vc = (id)self;
+    BOOL configured = QMUICMIActivated;
+    BOOL updatesBackgroundColor = configured || [vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)];
+    BOOL updatesBackgroundImage = configured || [vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)];
+    BOOL updatesBarStyle = configured || [vc respondsToSelector:@selector(qmui_navigationBarStyle)];
+    BOOL updatesShadowImage = configured || [vc respondsToSelector:@selector(qmui_navigationBarShadowImage)];
+    BOOL updatesTitleColor = configured || [vc respondsToSelector:@selector(qmui_titleViewTintColor)];
+    BOOL updatesTintColor = configured || [vc respondsToSelector:@selector(qmui_navigationBarTintColor)];
+    if (!(updatesBackgroundColor || updatesBackgroundImage || updatesBarStyle || updatesShadowImage || updatesTitleColor || updatesTintColor)) return;
+
+    // 每个业务 getter 只读取一次，四种显示状态使用同一份业务结果。
+    UIColor *backgroundColor = [vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)] ? [vc qmui_navigationBarBarTintColor] : configured ? NavBarBarTintColor : nil;
+    UIImage *backgroundImage = [vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)] ? [vc qmui_navigationBarBackgroundImage] : configured ? NavBarBackgroundImage : nil;
+    UIBarStyle barStyle = [vc respondsToSelector:@selector(qmui_navigationBarStyle)] ? [vc qmui_navigationBarStyle] : configured ? NavBarStyle : UIBarStyleDefault;
+    UIImage *shadowImage = [vc respondsToSelector:@selector(qmui_navigationBarShadowImage)] ? [vc qmui_navigationBarShadowImage] : configured ? NavBarShadowImage : nil;
+    UIColor *titleColor = [vc respondsToSelector:@selector(qmui_titleViewTintColor)] ? [vc qmui_titleViewTintColor] : configured ? NavBarTitleColor : nil;
+    UIColor *largeTitleColor = [vc respondsToSelector:@selector(qmui_titleViewTintColor)] ? titleColor : configured ? NavBarLargeTitleColor : nil;
+    UIColor *tintColor = [vc respondsToSelector:@selector(qmui_navigationBarTintColor)] ? [vc qmui_navigationBarTintColor] : configured ? NavBarTintColor : nil;
+
+    // 同一材料重复创建和赋值会让 UIKit 重建背景，转场中可能出现先白后磨砂。
+    static UIBlurEffect *lightEffect;
+    static UIBlurEffect *darkEffect;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        lightEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterialLight];
+        darkEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterialDark];
+    });
+
+    UINavigationBarAppearance *(^appearanceWithStyle)(UINavigationBarAppearance *, BOOL) = ^UINavigationBarAppearance *(UINavigationBarAppearance *source, BOOL standard) {
+        UINavigationBarAppearance *appearance = [source copy] ?: UINavigationBarAppearance.new;
+        // 配置表默认值只覆盖标准状态，独立的滚动/紧凑外观仅应用页面显式声明的覆盖。
+        if (updatesBackgroundColor && (standard || [vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)])) appearance.backgroundColor = backgroundColor;
+        if (updatesBackgroundImage && (standard || [vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)])) appearance.backgroundImage = backgroundImage;
+        if (updatesBarStyle && (standard || [vc respondsToSelector:@selector(qmui_navigationBarStyle)])) {
+            appearance.backgroundEffect = barStyle == UIBarStyleDefault ? lightEffect : darkEffect;
+        }
+        BOOL overridesBackground = standard || [vc respondsToSelector:@selector(qmui_navigationBarBackgroundImage)] || [vc respondsToSelector:@selector(qmui_navigationBarBarTintColor)] || [vc respondsToSelector:@selector(qmui_navigationBarStyle)];
+        if (overridesBackground && configured && NavBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) appearance.backgroundEffect = nil;
+        if (updatesShadowImage && (standard || [vc respondsToSelector:@selector(qmui_navigationBarShadowImage)])) appearance.shadowImage = shadowImage;
+        NSMutableDictionary<NSAttributedStringKey, id> *titleAttributes = appearance.titleTextAttributes.mutableCopy ?: NSMutableDictionary.new;
+        NSMutableDictionary<NSAttributedStringKey, id> *largeTitleAttributes = appearance.largeTitleTextAttributes.mutableCopy ?: NSMutableDictionary.new;
+        if (updatesTitleColor && (standard || [vc respondsToSelector:@selector(qmui_titleViewTintColor)])) {
+            titleAttributes[NSForegroundColorAttributeName] = titleColor;
+            largeTitleAttributes[NSForegroundColorAttributeName] = largeTitleColor;
+        }
+        if (standard && configured && NavBarTitleFont) titleAttributes[NSFontAttributeName] = NavBarTitleFont;
+        if (standard && configured && NavBarLargeTitleFont) largeTitleAttributes[NSFontAttributeName] = NavBarLargeTitleFont;
+        appearance.titleTextAttributes = titleAttributes;
+        appearance.largeTitleTextAttributes = largeTitleAttributes;
+        if (updatesTintColor && tintColor && (standard || [vc respondsToSelector:@selector(qmui_navigationBarTintColor)])) {
+            for (UIBarButtonItemAppearance *button in @[appearance.buttonAppearance, appearance.doneButtonAppearance, appearance.backButtonAppearance]) {
+                NSMutableDictionary<NSAttributedStringKey, id> *attributes = button.normal.titleTextAttributes.mutableCopy ?: NSMutableDictionary.new;
+                attributes[NSForegroundColorAttributeName] = tintColor;
+                button.normal.titleTextAttributes = attributes;
+            }
+        }
+        return appearance;
+    };
+
+    // 首次显示时 UIAppearance 可能尚未应用，启用配置表则从配置样式取默认值。
+    UINavigationBar *defaultBar = configured && !navigationController.navigationBar.window ? UINavigationBar.qmui_appearanceConfigured : navigationController.navigationBar;
+    UINavigationItem *item = self.navigationItem;
+    // 旧样式 setter 与 qmui_effect 仅对 QMUI 管理的页面同步，系统页面保持原有行为。
+    [item qmui_bindBOOL:YES forKey:@"qmuinb_usesNavigationItemAppearance"];
+    void (^assignAppearance)(NSString *, UINavigationBarAppearance *) = ^(NSString *key, UINavigationBarAppearance *appearance) {
+        UINavigationBarAppearance *previous = [item valueForKey:key];
+        if (previous == appearance || [previous isEqual:appearance]) return;
+        // 业务样式在动画开始前一次提交，不对材料本身做隐式动画。
+        [UIView performWithoutAnimation:^{ [item setValue:appearance forKey:key]; }];
+    };
+    assignAppearance(@"standardAppearance", appearanceWithStyle(item.standardAppearance ?: defaultBar.standardAppearance, YES));
+    if (configured && NavBarUsesStandardAppearanceOnly) {
+        assignAppearance(@"scrollEdgeAppearance", item.standardAppearance);
+        assignAppearance(@"compactAppearance", item.standardAppearance);
+        assignAppearance(@"compactScrollEdgeAppearance", item.standardAppearance);
+    } else {
+        // 未统一四种状态时保留业务的独立外观及 UIKit 的 nil 回退规则。
+        UINavigationBarAppearance *edge = item.scrollEdgeAppearance ?: defaultBar.scrollEdgeAppearance;
+        UINavigationBarAppearance *compact = item.compactAppearance ?: defaultBar.compactAppearance;
+        UINavigationBarAppearance *compactEdge = item.compactScrollEdgeAppearance ?: defaultBar.compactScrollEdgeAppearance;
+        assignAppearance(@"scrollEdgeAppearance", edge ? appearanceWithStyle(edge, NO) : nil);
+        assignAppearance(@"compactAppearance", compact ? appearanceWithStyle(compact, NO) : nil);
+        assignAppearance(@"compactScrollEdgeAppearance", compactEdge ? appearanceWithStyle(compactEdge, NO) : nil);
+    }
+    if (updatesTitleColor && item.titleView.qmui_useAsNavigationTitleView) {
+        item.titleView.tintColor = titleColor;
+    }
 }
 
 // 仅处理导航栏标题
@@ -391,6 +691,11 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     }
     
     if (![self conformsToProtocol:@protocol(QMUINavigationControllerAppearanceDelegate)]) {
+        return;
+    }
+
+    if (@available(iOS 26.0, *)) {
+        [self qmuinb_updateNavigationItemAppearanceForNavigationController:self.navigationController];
         return;
     }
     
@@ -469,6 +774,15 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     return NO;
 }
 
+/// 获取当前页面实际导航栏占位，避免转场判断依赖固定机型高度。
+static CGFloat QMUIExpectedNavigationContentTop(UIViewController *viewController) {
+    UINavigationController *navigationController = viewController.navigationController;
+    if (navigationController.navigationBarHidden) {
+        return 0;
+    }
+    return SafeAreaInsetsForView(viewController.view).top + NavigationBarHeightForViewController(viewController);
+}
+
 // 对于有一个界面隐藏了导航栏的情况，我们也要做自定义的动画去干预，因为如果左右两个界面导航栏样式不同，你不去干预的话，push/pop 瞬间导航栏会变成即将显示的那个界面的样式，这不符合预期
 - (BOOL)shouldCustomTransitionAutomaticallyForOperation:(UINavigationControllerOperation)operation firstViewController:(UIViewController *)viewController1 secondViewController:(UIViewController *)viewController2 {
     
@@ -479,8 +793,10 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
         return NO;// 只处理前后两个界面都是 QMUI 系列的场景
     }
     
-    BOOL vc1Clips = vc1.isViewLoaded && vc1.view.clipsToBounds && vc1.qmui_navigationBarMaxYInViewCoordinator < NavigationContentTopConstant;
-    BOOL vc2Clips = vc2.isViewLoaded && vc2.view.clipsToBounds && vc2.qmui_navigationBarMaxYInViewCoordinator < NavigationContentTopConstant;
+    CGFloat vc1NavigationContentTop = vc1.isViewLoaded ? QMUIExpectedNavigationContentTop(vc1) : 0;
+    CGFloat vc2NavigationContentTop = vc2.isViewLoaded ? QMUIExpectedNavigationContentTop(vc2) : 0;
+    BOOL vc1Clips = vc1.isViewLoaded && vc1.view.clipsToBounds && vc1.qmui_navigationBarMaxYInViewCoordinator < vc1NavigationContentTop;
+    BOOL vc2Clips = vc2.isViewLoaded && vc2.view.clipsToBounds && vc2.qmui_navigationBarMaxYInViewCoordinator < vc2NavigationContentTop;
     if (vc1Clips || vc2Clips) {
         QMUILogWarn(@"UINavigationController (NavigationBarTransition)", @"因界面布局原因导致无法优化导航栏动画，vc1 = %@，maxY1 = %.0f, vc2 = %@，maxY2 = %.0f", vc1, vc1.qmui_navigationBarMaxYInViewCoordinator, vc2, vc2.qmui_navigationBarMaxYInViewCoordinator);
         return NO;// 左右两个界面只要其中某个界面无法完整显示 navigationBar，都不进行动画优化

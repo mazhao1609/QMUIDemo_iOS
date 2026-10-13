@@ -18,7 +18,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 在 App 的 rootViewController.view.frame.size 发生变化（例如横竖屏旋转，或者 iPad Split View 模式下调整大小）前发出通知，你可以通过 QMUIPrecedingAppSizeUserInfoKey 获取变化前的值（也即当前值），用 QMUIFollowingAppSizeUserInfoKey 获取变化后的值。
+/// 在每个窗口 Scene 的 rootViewController.view.frame.size 发生变化（例如横竖屏旋转、分屏调整或折叠屏展开）前发出通知，你可以通过 QMUIPrecedingAppSizeUserInfoKey 获取变化前的值（也即当前值），用 QMUIFollowingAppSizeUserInfoKey 获取变化后的值，通过 QMUISourceWindowUserInfoKey 获取发生变化的窗口。
 extern NSNotificationName const QMUIAppSizeWillChangeNotification;
 
 /// 对应一个 NSValue 包裹的 CGSize 对象
@@ -26,6 +26,9 @@ extern NSString *const QMUIPrecedingAppSizeUserInfoKey;
 
 /// 对应一个 NSValue 包裹的 CGSize 对象
 extern NSString *const QMUIFollowingAppSizeUserInfoKey;
+
+/// 对应发生尺寸变化的 UIWindow，用于多窗口场景下过滤通知。
+extern NSString *const QMUISourceWindowUserInfoKey;
 
 typedef NS_OPTIONS(NSUInteger, QMUIViewControllerVisibleState) {
     QMUIViewControllerUnknow        = 1 << 0,   // 初始化完成但尚未触发 viewDidLoad
@@ -91,6 +94,7 @@ typedef NS_OPTIONS(NSUInteger, QMUIViewControllerVisibleState) {
  *  UINavigationBar 在 self.view 坐标系里的 maxY，一般用于 self.view.subviews 布局时参考用
  *  @warning 注意由于使用了坐标系转换的计算，所以要求在 self.view.window 存在的情况下使用才可以，因此请勿在 viewDidLoad 内使用，建议在 viewDidLayoutSubviews、viewWillAppear: 里使用。
  *  @warning 如果不存在 UINavigationBar，则返回 0
+ *  iOS 26 及以后在转场中按各页面声明的导航栏显隐状态计算，避免共享导航栏延后移动导致首帧占位错误。
  */
 @property(nonatomic, assign, readonly) CGFloat qmui_navigationBarMaxYInViewCoordinator;
 

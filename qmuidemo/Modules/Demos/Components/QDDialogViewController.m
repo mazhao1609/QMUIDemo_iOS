@@ -146,7 +146,7 @@ static NSString * const kSectionTitleForTextField = @"QMUIDialogTextFieldViewCon
     buttonTitleAttributes[NSForegroundColorAttributeName] = dialogViewController.headerViewBackgroundColor;
     dialogViewController.buttonTitleAttributes = buttonTitleAttributes;
     [dialogViewController.submitButton setImage:[[UIImageMake(@"icon_emotion") qmui_imageResizedInLimitedSize:CGSizeMake(18, 18) resizingMode:QMUIImageResizingModeScaleToFill] qmui_imageWithTintColor:buttonTitleAttributes[NSForegroundColorAttributeName]] forState:UIControlStateNormal];
-    dialogViewController.submitButton.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8);
+    dialogViewController.submitButton.qmui_imageInsets = UIEdgeInsetsMake(0, 0, 0, 8);
     
     [dialogViewController show];
 }

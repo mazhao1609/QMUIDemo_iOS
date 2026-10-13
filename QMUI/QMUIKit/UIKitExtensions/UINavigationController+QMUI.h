@@ -97,6 +97,7 @@ typedef void (^QMUINavigationActionDidChangeBlock)(QMUINavigationAction action, 
 
 /**
  * 点击系统返回按钮或者手势返回的时候是否要相应界面返回（手动调用代码pop排除）。支持参数判断是点击系统返回按钮还是通过手势触发
+ * iOS 26+ 同时覆盖边缘返回和内容区域全屏返回，同一次触摸只询问一次；拒绝返回不会影响控件自身的拖动。
  * 一般使用的场景是：可以在这个返回里面做一些业务的判断，比如点击返回按钮的时候，如果输入框里面的文本没有满足条件的则可以弹 Alert 并且返回 NO 来阻止用户退出界面导致不合法的数据或者数据丢失。
  */
 - (BOOL)shouldPopViewControllerByBackButtonOrPopGesture:(BOOL)byPopGesture;
@@ -111,6 +112,15 @@ typedef void (^QMUINavigationActionDidChangeBlock)(QMUINavigationAction action, 
  *  @see UINavigationControllerBackButtonHandlerProtocol
  */
 @interface UIViewController (BackBarButtonSupport) <UINavigationControllerBackButtonHandlerProtocol>
+
+@end
+
+@interface UIView (QMUIInteractiveContentPopGesture)
+
+/// iOS 26+ 在此视图及其子视图内拖动时，优先响应内容交互，不触发内容区域返回；默认 NO。
+/// 横向可滚动的 UIScrollView、启用的 UISlider 自动保护，无需设置；自定义拖动控件可设为 YES。
+/// 不影响屏幕边缘返回，iOS 15–18 无效果。
+@property(nonatomic, assign) BOOL qmui_preventsInteractiveContentPopGestureRecognizer;
 
 @end
 

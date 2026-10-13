@@ -17,11 +17,42 @@
 #import "QMUICore.h"
 #import "QMUILog.h"
 #import "UIViewController+QMUI.h"
+#import "NSObject+QMUI.h"
+#import <UIKit/UIGestureRecognizerSubclass.h>
+
+/// 仅用于建立失败依赖的旁路手势，不取消控件触摸，也不阻止其内部手势。
+@interface _QMUINavigationContentPopGestureRecognizer : UIPanGestureRecognizer <UIGestureRecognizerDelegate>
+- (BOOL)qmuinc_shouldProtectTouchInView:(UIView *)view;
+@end
 
 @interface _QMUINavigationInteractiveGestureDelegator : NSObject <UIGestureRecognizerDelegate>
 
 @property(nonatomic, weak, readonly) UINavigationController *parentViewController;
 - (instancetype)initWithParentViewController:(UINavigationController *)parentViewController;
+@end
+
+/// 两个独立的许可手势分别对应边缘和内容返回，共享同一次触摸的业务判断。
+@interface _QMUINavigationBackGestureRecognizer : UIPanGestureRecognizer
+@end
+
+@interface _QMUINavigationEdgeBackGestureRecognizer : UIScreenEdgePanGestureRecognizer
+@end
+
+@interface _QMUINavigationBackGestureDelegator : NSObject <UIGestureRecognizerDelegate>
+@property(nonatomic, weak) UINavigationController *navigationController;
+@property(nonatomic, strong) _QMUINavigationEdgeBackGestureRecognizer *edgeGestureRecognizer;
+@property(nonatomic, strong) _QMUINavigationBackGestureRecognizer *contentGestureRecognizer;
+@property(nonatomic, weak) UIGestureRecognizer *protectedEdgeGestureRecognizer;
+@property(nonatomic, weak) UIGestureRecognizer *protectedContentGestureRecognizer;
+@property(nonatomic, weak) UITouch *edgeTouch;
+@property(nonatomic, weak) UITouch *contentTouch;
+@property(nonatomic, weak) UITouch *currentTouch;
+@property(nonatomic, weak) UITouch *decisionTouch;
+@property(nonatomic, weak) UIViewController *decisionViewController;
+@property(nonatomic, assign) BOOL decisionAllowsPop;
+- (void)qmuinc_prepareForTouch:(UITouch *)touch isEdge:(BOOL)isEdge;
+- (BOOL)qmuinc_canPopForTouch:(UITouch *)touch;
+- (BOOL)qmuinc_shouldBlockPopForTranslation:(CGPoint)translation touch:(UITouch *)touch;
 @end
 
 @interface UINavigationController ()
@@ -30,6 +61,13 @@
 @property(nullable, nonatomic, readwrite) UIViewController *qmui_endedTransitionTopViewController;
 @property(nullable, nonatomic, weak, readonly) id<UIGestureRecognizerDelegate> qmui_interactivePopGestureRecognizerDelegate;
 @property(nullable, nonatomic, strong) _QMUINavigationInteractiveGestureDelegator *qmui_interactiveGestureDelegator;
+@property(nullable, nonatomic, strong) _QMUINavigationContentPopGestureRecognizer *qmuinc_contentPopProtectionGestureRecognizer;
+@property(nullable, nonatomic, weak) UIGestureRecognizer *qmuinc_protectedContentPopGestureRecognizer;
+@property(nullable, nonatomic, strong) _QMUINavigationBackGestureDelegator *qmuinc_backGestureDelegator;
+@end
+
+@interface UINavigationController (QMUIInteractiveContentPopGesturePrivate)
+- (void)qmuinc_updateContentPopGestureProtection;
 @end
 
 @implementation UINavigationController (QMUI)
@@ -39,6 +77,9 @@ QMUISynthesizeIdStrongProperty(qmuinc_navigationActionDidChangeBlocks, setQmuinc
 QMUISynthesizeIdWeakProperty(qmui_endedTransitionTopViewController, setQmui_endedTransitionTopViewController)
 QMUISynthesizeIdWeakProperty(qmui_interactivePopGestureRecognizerDelegate, setQmui_interactivePopGestureRecognizerDelegate)
 QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interactiveGestureDelegator)
+QMUISynthesizeIdStrongProperty(qmuinc_contentPopProtectionGestureRecognizer, setQmuinc_contentPopProtectionGestureRecognizer)
+QMUISynthesizeIdWeakProperty(qmuinc_protectedContentPopGestureRecognizer, setQmuinc_protectedContentPopGestureRecognizer)
+QMUISynthesizeIdStrongProperty(qmuinc_backGestureDelegator, setQmuinc_backGestureDelegator)
 
 + (void)load {
     static dispatch_once_t onceToken;
@@ -106,6 +147,7 @@ QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interac
             selfObject.qmui_interactivePopGestureRecognizerDelegate = selfObject.interactivePopGestureRecognizer.delegate;
             selfObject.qmui_interactiveGestureDelegator = [[_QMUINavigationInteractiveGestureDelegator alloc] initWithParentViewController:selfObject];
             selfObject.interactivePopGestureRecognizer.delegate = selfObject.qmui_interactiveGestureDelegator;
+            [selfObject qmuinc_updateContentPopGestureProtection];
             
             // 根据 NavBarContainerClasses 的值来决定是否应用 bar.tintColor
             // tintColor 没有被添加 UI_APPEARANCE_SELECTOR，所以没有采用 UIAppearance 的方式去实现（虽然它实际上是支持的）
@@ -141,6 +183,11 @@ QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interac
                     selfObject.toolbar.tintColor = ToolBarTintColor;
                 }
             }
+        });
+
+        ExtendImplementationOfVoidMethodWithoutArguments([UINavigationController class], @selector(viewDidLayoutSubviews), ^(UINavigationController *selfObject) {
+            // UIKit 可能延后创建或替换返回手势，布局时补齐两种手势的失败依赖。
+            [selfObject qmuinc_updateContentPopGestureProtection];
         });
         
         OverrideImplementation(NSClassFromString([NSString qmui_stringByConcat:@"_", @"UINavigationBar", @"ContentView", nil]), NSSelectorFromString(@"__backButtonAction:"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
@@ -544,6 +591,57 @@ static char kAssociatedObjectKey_navigationAction;
     return result;
 }
 
+- (void)qmuinc_updateContentPopGestureProtection {
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 260000
+    if (@available(iOS 26.0, *)) {
+        UIGestureRecognizer *contentPop = self.interactiveContentPopGestureRecognizer;
+        if (!self.qmuinc_contentPopProtectionGestureRecognizer) {
+            _QMUINavigationContentPopGestureRecognizer *protection = [[_QMUINavigationContentPopGestureRecognizer alloc] initWithTarget:nil action:NULL];
+            [self.view addGestureRecognizer:protection];
+            self.qmuinc_contentPopProtectionGestureRecognizer = protection;
+        }
+        if (contentPop && self.qmuinc_protectedContentPopGestureRecognizer != contentPop) {
+            // Apple 对该系统手势仅开放失败依赖配置，保留其原有 delegate、enabled 与转场逻辑。
+            [contentPop requireGestureRecognizerToFail:self.qmuinc_contentPopProtectionGestureRecognizer];
+            self.qmuinc_protectedContentPopGestureRecognizer = contentPop;
+        }
+
+        if (!self.qmuinc_backGestureDelegator) {
+            _QMUINavigationBackGestureDelegator *delegator = _QMUINavigationBackGestureDelegator.new;
+            delegator.navigationController = self;
+            delegator.edgeGestureRecognizer = [[_QMUINavigationEdgeBackGestureRecognizer alloc] initWithTarget:nil action:NULL];
+            delegator.contentGestureRecognizer = [[_QMUINavigationBackGestureRecognizer alloc] initWithTarget:nil action:NULL];
+            for (UIPanGestureRecognizer *gesture in @[delegator.edgeGestureRecognizer, delegator.contentGestureRecognizer]) {
+                gesture.delegate = delegator;
+                gesture.cancelsTouchesInView = NO;
+                gesture.delaysTouchesBegan = NO;
+                gesture.delaysTouchesEnded = NO;
+                gesture.maximumNumberOfTouches = 1;
+                [self.view addGestureRecognizer:gesture];
+            }
+            self.qmuinc_backGestureDelegator = delegator;
+        }
+        _QMUINavigationBackGestureDelegator *delegator = self.qmuinc_backGestureDelegator;
+        delegator.edgeGestureRecognizer.edges = self.view.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft ? UIRectEdgeRight : UIRectEdgeLeft;
+        UIGestureRecognizer *edgePop = self.interactivePopGestureRecognizer;
+        if (edgePop && edgePop.delegate != self.qmui_interactiveGestureDelegator) {
+            // UIKit 可能在转场后重设边缘代理，保存当前代理并恢复业务拦截，继续转发系统判断。
+            self.qmui_interactivePopGestureRecognizerDelegate = edgePop.delegate;
+            edgePop.delegate = self.qmui_interactiveGestureDelegator;
+        }
+        if (edgePop && delegator.protectedEdgeGestureRecognizer != edgePop) {
+            [edgePop requireGestureRecognizerToFail:delegator.edgeGestureRecognizer];
+            delegator.protectedEdgeGestureRecognizer = edgePop;
+        }
+        if (contentPop && delegator.protectedContentGestureRecognizer != contentPop) {
+            // 新系统通过公开失败依赖执行拦截，不接管内容返回的 delegate、enabled 或私有 target。
+            [contentPop requireGestureRecognizerToFail:delegator.contentGestureRecognizer];
+            delegator.protectedContentGestureRecognizer = contentPop;
+        }
+    }
+#endif
+}
+
 - (BOOL)canPopViewController:(UIViewController *)viewController byPopGesture:(BOOL)byPopGesture {
     BOOL canPopViewController = YES;
     
@@ -557,7 +655,16 @@ static char kAssociatedObjectKey_navigationAction;
 
 - (BOOL)shouldForceEnableInteractivePopGestureRecognizer {
     UIViewController *viewController = [self topViewController];
-    return self.viewControllers.count > 1 && self.interactivePopGestureRecognizer.enabled && [viewController respondsToSelector:@selector(forceEnableInteractivePopGestureRecognizer)] && [viewController forceEnableInteractivePopGestureRecognizer];
+    UIBarButtonItem *item = viewController.navigationItem.leftBarButtonItem;
+    BOOL plainBackButton = [item qmui_getBoundBOOLForKey:@"qmuinb_plainBackButton"] && item.target == viewController && item.enabled;
+    BOOL requested = [viewController respondsToSelector:@selector(forceEnableInteractivePopGestureRecognizer)] && [viewController forceEnableInteractivePopGestureRecognizer];
+    if (!requested && plainBackButton) {
+        // 自动兼容只针对原系统代理，不绕过业务额外安装的代理判断。
+        id<UIGestureRecognizerDelegate> originalDelegate = self.qmui_interactivePopGestureRecognizerDelegate;
+        requested = originalDelegate && [[NSBundle bundleForClass:[originalDelegate class]] isEqual:[NSBundle bundleForClass:UINavigationController.class]];
+    }
+    return requested && self.viewControllers.count > 1 && self.interactivePopGestureRecognizer.enabled &&
+        self.qmui_navigationAction == QMUINavigationActionUnknow && !self.transitionCoordinator && !self.presentedViewController;
 }
 
 @end
@@ -597,10 +704,19 @@ static char kAssociatedObjectKey_navigationAction;
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
-        BOOL canPopViewController = [self.parentViewController canPopViewController:self.parentViewController.topViewController byPopGesture:YES];
+        _QMUINavigationBackGestureDelegator *backDelegator = self.parentViewController.qmuinc_backGestureDelegator;
+        // 边缘返回必须直接应用业务否决，不能仅依赖旁路手势；共用缓存避免再次弹窗。
+        BOOL canPopViewController = backDelegator.protectedEdgeGestureRecognizer == gestureRecognizer
+            ? [backDelegator qmuinc_canPopForTouch:backDelegator.edgeTouch ?: backDelegator.contentTouch]
+            : [self.parentViewController canPopViewController:self.parentViewController.topViewController byPopGesture:YES];
         if (canPopViewController) {
             if ([self.parentViewController.qmui_interactivePopGestureRecognizerDelegate respondsToSelector:_cmd]) {
                 BOOL result = [self.parentViewController.qmui_interactivePopGestureRecognizerDelegate gestureRecognizerShouldBegin:gestureRecognizer];
+                if (!result && [self.parentViewController shouldForceEnableInteractivePopGestureRecognizer]) {
+                    id<UIGestureRecognizerDelegate> originalDelegate = self.parentViewController.qmui_interactivePopGestureRecognizerDelegate;
+                    // 仅补齐系统因自定义左按钮拒绝的情况，不覆盖业务自定义代理的 NO。
+                    if ([[NSBundle bundleForClass:[originalDelegate class]] isEqual:[NSBundle bundleForClass:UINavigationController.class]]) return YES;
+                }
                 return result;
             } else {
                 return NO;
@@ -614,6 +730,7 @@ static char kAssociatedObjectKey_navigationAction;
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
     if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+        [self.parentViewController.qmuinc_backGestureDelegator qmuinc_prepareForTouch:touch isEdge:YES];
         id<UIGestureRecognizerDelegate>originGestureDelegate = self.parentViewController.qmui_interactivePopGestureRecognizerDelegate;
         if ([originGestureDelegate respondsToSelector:_cmd]) {
             BOOL originalValue = [originGestureDelegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
@@ -639,6 +756,9 @@ static char kAssociatedObjectKey_navigationAction;
 // 是否要gestureRecognizer检测失败了，才去检测otherGestureRecognizer
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+        _QMUINavigationBackGestureDelegator *backDelegator = self.parentViewController.qmuinc_backGestureDelegator;
+        // 系统返回已经等待许可手势失败，不能再让许可手势反向等待系统返回，否则形成循环依赖。
+        if (otherGestureRecognizer == backDelegator.edgeGestureRecognizer || otherGestureRecognizer == backDelegator.contentGestureRecognizer) return NO;
         // 如果只是实现了上面几个手势的delegate，那么返回的手势和当前界面上的scrollview或者其他存在的手势会冲突，所以如果判断是返回手势，则优先响应返回手势再响应其他手势。
         // 不知道为什么，系统竟然没有实现这个delegate，那么它是怎么处理返回手势和其他手势的优先级的
         return YES;
@@ -649,5 +769,142 @@ static char kAssociatedObjectKey_navigationAction;
 @end
 
 
+@implementation _QMUINavigationBackGestureRecognizer
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
+    return NO;
+}
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
+    return NO;
+}
+@end
+
+@implementation _QMUINavigationEdgeBackGestureRecognizer
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
+    return NO;
+}
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
+    return NO;
+}
+@end
+
+@implementation _QMUINavigationBackGestureDelegator
+
+- (void)qmuinc_prepareForTouch:(UITouch *)touch isEdge:(BOOL)isEdge {
+    if (isEdge) self.edgeTouch = touch;
+    else self.contentTouch = touch;
+    // 系统代理和两个许可手势收到同一触摸时，只清理一次上一轮判断。
+    if (self.currentTouch != touch) {
+        self.currentTouch = touch;
+        self.decisionTouch = nil;
+    }
+}
+
+- (BOOL)qmuinc_canCheckPop {
+    UINavigationController *navigationController = self.navigationController;
+    // 根页面、转场中或被模态页面覆盖时，不触发业务确认。
+    return navigationController.viewControllers.count > 1
+        && navigationController.qmui_navigationAction == QMUINavigationActionUnknow
+        && !navigationController.transitionCoordinator
+        && !navigationController.presentedViewController
+        && [navigationController.topViewController respondsToSelector:@selector(shouldPopViewControllerByBackButtonOrPopGesture:)];
+}
+
+- (BOOL)qmuinc_canPopForTouch:(UITouch *)touch {
+    UIViewController *viewController = self.navigationController.topViewController;
+    if (touch && self.decisionTouch == touch && self.decisionViewController == viewController) return self.decisionAllowsPop;
+    if (![viewController respondsToSelector:@selector(shouldPopViewControllerByBackButtonOrPopGesture:)]) return YES;
+    if (![self qmuinc_canCheckPop]) return NO;
+    self.decisionTouch = touch;
+    self.decisionViewController = viewController;
+    self.decisionAllowsPop = [self.navigationController canPopViewController:viewController byPopGesture:YES];
+    return self.decisionAllowsPop;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    BOOL isEdge = gestureRecognizer == self.edgeGestureRecognizer;
+    UIGestureRecognizer *systemGesture = isEdge ? self.protectedEdgeGestureRecognizer : self.protectedContentGestureRecognizer;
+    if (!systemGesture.enabled || ![self qmuinc_canCheckPop]) return NO;
+    if (!isEdge) {
+        // 横向控件仍优先响应自身拖动；边缘返回由独立的边缘许可手势处理。
+        if ([self.navigationController.qmuinc_contentPopProtectionGestureRecognizer qmuinc_shouldProtectTouchInView:touch.view]) return NO;
+    }
+    [self qmuinc_prepareForTouch:touch isEdge:isEdge];
+    return YES;
+}
+
+- (BOOL)gestureRecognizerShouldBegin:(UIPanGestureRecognizer *)gestureRecognizer {
+    CGPoint translation = [gestureRecognizer translationInView:gestureRecognizer.view];
+    if (CGPointEqualToPoint(translation, CGPointZero)) translation = [gestureRecognizer velocityInView:gestureRecognizer.view];
+    UITouch *touch = gestureRecognizer == self.edgeGestureRecognizer ? self.edgeTouch : self.contentTouch;
+    return [self qmuinc_shouldBlockPopForTranslation:translation touch:touch];
+}
+
+- (BOOL)qmuinc_shouldBlockPopForTranslation:(CGPoint)translation touch:(UITouch *)touch {
+    if (self.navigationController.view.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft) translation.x = -translation.x;
+    // 只在向返回方向拖动时询问业务，点按、纵向滚动及反方向拖动不会弹出确认。
+    if (translation.x <= 0 || translation.x <= fabs(translation.y)) return NO;
+    if (!touch) return NO;
+    BOOL hasDecision = self.decisionTouch == touch && self.decisionViewController == self.navigationController.topViewController;
+    if (!hasDecision && ![self qmuinc_canCheckPop]) return NO;
+    // 允许返回时立即失败，让系统手势开始；拒绝时识别许可手势，使系统返回失败。
+    return ![self qmuinc_canPopForTouch:touch];
+}
+
+@end
+
+
 @implementation UIViewController (BackBarButtonSupport)
+@end
+
+@implementation UIView (QMUIInteractiveContentPopGesture)
+QMUISynthesizeBOOLProperty(qmui_preventsInteractiveContentPopGestureRecognizer, setQmui_preventsInteractiveContentPopGestureRecognizer)
+@end
+
+@implementation _QMUINavigationContentPopGestureRecognizer
+
+- (instancetype)initWithTarget:(id)target action:(SEL)action {
+    if (self = [super initWithTarget:target action:action]) {
+        self.delegate = self;
+        self.cancelsTouchesInView = NO;
+        self.delaysTouchesBegan = NO;
+        self.delaysTouchesEnded = NO;
+        self.maximumNumberOfTouches = 1;
+    }
+    return self;
+}
+
+- (BOOL)qmuinc_shouldProtectTouchInView:(UIView *)view {
+    // 沿触摸起点向上判断，可覆盖滑块内部子视图、嵌套列表及自定义拖动区域。
+    // 从保护区域开始的拖动即使移出控件，也继续让内容交互优先。
+    for (UIView *candidate = view; candidate; candidate = candidate.superview) {
+        if (candidate.qmui_preventsInteractiveContentPopGestureRecognizer) return YES;
+        if ([candidate isKindOfClass:UISlider.class] && ((UISlider *)candidate).enabled) return YES;
+        if ([candidate isKindOfClass:UIScrollView.class]) {
+            UIScrollView *scrollView = (UIScrollView *)candidate;
+            if (scrollView.scrollEnabled && scrollView.panGestureRecognizer.enabled) {
+                UIEdgeInsets insets = scrollView.adjustedContentInset;
+                CGFloat horizontalExtent = scrollView.contentSize.width + insets.left + insets.right;
+                // 每次触摸实时判断，数据、内边距或滚动开关变化后无需重新绑定手势。
+                if ((scrollView.bounces && scrollView.alwaysBounceHorizontal) || horizontalExtent > CGRectGetWidth(scrollView.bounds) + PixelOne) return YES;
+            }
+        }
+        if (candidate == self.view) break;
+    }
+    return NO;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    return [self qmuinc_shouldProtectTouchInView:touch.view];
+}
+
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
+    // 内容返回通过显式失败依赖等待本手势，其余系统手势（包括边缘返回）仍照常竞争。
+    return NO;
+}
+
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
+    // 滑块的内部拖动手势先识别时，仍保持内容返回的保护关系。
+    return NO;
+}
+
 @end

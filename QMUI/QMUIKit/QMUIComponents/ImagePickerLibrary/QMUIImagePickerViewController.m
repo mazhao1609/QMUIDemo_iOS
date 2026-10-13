@@ -26,7 +26,6 @@
 #import "UIScrollView+QMUI.h"
 #import "CALayer+QMUI.h"
 #import "UIView+QMUI.h"
-#import <MobileCoreServices/MobileCoreServices.h>
 #import "QMUIEmptyView.h"
 #import "UIViewController+QMUI.h"
 #import "QMUILog.h"
@@ -139,14 +138,17 @@ static NSString * const kImageOrUnknownCellIdentifier = @"imageorunknown";
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    // 图片选择器可能在独立窗口中展示，不能使用其他 Scene 的全局安全区。
+    UIEdgeInsets safeAreaInsets = SafeAreaInsetsForView(self.view);
     
     CGFloat operationToolBarViewHeight = 0;
     if (self.allowsMultipleSelection) {
-        operationToolBarViewHeight = ToolBarHeight;
+        CGFloat fallbackToolbarHeight = IS_IPAD ? (IS_NOTCHED_SCREEN ? 70 : 50) : (IS_LANDSCAPE ? PreferredValueForVisualDevice(44, 32) : 44);
+        operationToolBarViewHeight = fallbackToolbarHeight + safeAreaInsets.bottom;
         CGFloat toolbarPaddingHorizontal = 12;
         self.operationToolBarView.frame = CGRectMake(0, CGRectGetHeight(self.view.bounds) - operationToolBarViewHeight, CGRectGetWidth(self.view.bounds), operationToolBarViewHeight);
-        self.previewButton.frame = CGRectSetXY(self.previewButton.frame, toolbarPaddingHorizontal, CGFloatGetCenter(CGRectGetHeight(self.operationToolBarView.bounds) - SafeAreaInsetsConstantForDeviceWithNotch.bottom, CGRectGetHeight(self.previewButton.frame)));
-        self.sendButton.frame = CGRectMake(CGRectGetWidth(self.operationToolBarView.bounds) - toolbarPaddingHorizontal - CGRectGetWidth(self.sendButton.frame), CGFloatGetCenter(CGRectGetHeight(self.operationToolBarView.frame) - SafeAreaInsetsConstantForDeviceWithNotch.bottom, CGRectGetHeight(self.sendButton.frame)), CGRectGetWidth(self.sendButton.frame), CGRectGetHeight(self.sendButton.frame));
+        self.previewButton.frame = CGRectSetXY(self.previewButton.frame, toolbarPaddingHorizontal, CGFloatGetCenter(CGRectGetHeight(self.operationToolBarView.bounds) - safeAreaInsets.bottom, CGRectGetHeight(self.previewButton.frame)));
+        self.sendButton.frame = CGRectMake(CGRectGetWidth(self.operationToolBarView.bounds) - toolbarPaddingHorizontal - CGRectGetWidth(self.sendButton.frame), CGFloatGetCenter(CGRectGetHeight(self.operationToolBarView.frame) - safeAreaInsets.bottom, CGRectGetHeight(self.sendButton.frame)), CGRectGetWidth(self.sendButton.frame), CGRectGetHeight(self.sendButton.frame));
         CGSize imageCountLabelSize = CGSizeMake(18, 18);
         self.imageCountLabel.frame = CGRectMake(CGRectGetMinX(self.sendButton.frame) - imageCountLabelSize.width - 5, CGRectGetMinY(self.sendButton.frame) + CGFloatGetCenter(CGRectGetHeight(self.sendButton.frame), imageCountLabelSize.height), imageCountLabelSize.width, imageCountLabelSize.height);
         self.imageCountLabel.layer.cornerRadius = CGRectGetHeight(self.imageCountLabel.bounds) / 2;

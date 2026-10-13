@@ -168,11 +168,13 @@ static NSInteger const kQMUIMoreOperationItemViewTagOffset = 999;
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    // 操作面板可能属于任意 Scene，使用当前 view 的安全区处理折叠屏和分屏。
+    UIEdgeInsets safeAreaInsets = SafeAreaInsetsForView(self.view);
     
     __block CGFloat layoutY = CGRectGetHeight(self.view.bounds);
     
     if (!self.extendLayer.hidden) {
-        self.extendLayer.frame = CGRectMake(0, layoutY, CGRectGetWidth(self.view.bounds), SafeAreaInsetsConstantForDeviceWithNotch.bottom);
+        self.extendLayer.frame = CGRectMake(0, layoutY, CGRectGetWidth(self.view.bounds), safeAreaInsets.bottom);
         if (self.view.clipsToBounds) {
             QMUILog(@"QMUIMoreOperationController", @"%@ 需要显示 extendLayer，但却被父级 clip 掉了，可能看不到", NSStringFromClass(self.class));
         }
@@ -523,7 +525,7 @@ static NSInteger const kQMUIMoreOperationItemViewTagOffset = 999;
 - (void)setItemTitleMarginTop:(CGFloat)itemTitleMarginTop {
     _itemTitleMarginTop = itemTitleMarginTop;
     [self.mutableItems qmui_enumerateNestedArrayWithBlock:^(QMUIMoreOperationItemView *itemView, BOOL *stop) {
-        itemView.titleEdgeInsets = UIEdgeInsetsMake(itemTitleMarginTop, 0, 0, 0);
+        itemView.qmui_titleInsets = UIEdgeInsetsMake(itemTitleMarginTop, 0, 0, 0);
         [itemView setNeedsLayout];
     }];
 }
@@ -714,7 +716,7 @@ static NSInteger const kQMUIMoreOperationItemViewTagOffset = 999;
         moreOperationController = [QMUIMoreOperationController appearance];
     }
     self.titleLabel.font = moreOperationController.itemTitleFont;
-    self.titleEdgeInsets = UIEdgeInsetsMake(moreOperationController.itemTitleMarginTop, 0, 0, 0);
+    self.qmui_titleInsets = UIEdgeInsetsMake(moreOperationController.itemTitleMarginTop, 0, 0, 0);
     [self setTitleColor:moreOperationController.itemTitleColor forState:UIControlStateNormal];
     self.imageView.backgroundColor = moreOperationController.itemBackgroundColor;
     

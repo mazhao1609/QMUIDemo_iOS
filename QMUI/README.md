@@ -29,6 +29,10 @@ QMUI iOS 是一个致力于提高项目 UI 开发效率的解决方案，其设�
 
 ## 支持iOS版本
 
+本维护版本最低支持 **iOS 15**。现代系统适配和验证范围见 [兼容说明](COMPATIBILITY.md)。
+
+以下为上游历史版本：
+
 1. 4.6.1 及以上，iOS 13+。
 2. 4.4.0 及以上，iOS 11+。
 3. 4.2.0 及以上，iOS 10+。
@@ -55,7 +59,7 @@ pod 'QMUIKit'
 - 关于 AutoLayout：通常可以配合 Masonry 等常见的 AutoLayout 框架使用，若遇到不兼容的个案请提 issue。
 - 关于 xib / storyboard：现已全面支持。
 - 关于 Swift：可以正常使用，如遇到问题请提 issue。
-- 关于 UIScene：暂不支持 Multiple Window。
+- 关于 UIScene：窗口查询已使用 Scene API，视图相关计算优先使用所属窗口。缺少上下文的全局工具仍按前台业务窗口处理；Demo 支持多场景窗口。布局代码可使用 `SafeAreaInsetsForView(view)` 与 `IS_LANDSCAPE_FOR_VIEW(view)` 获取当前窗口指标。
 
 ## 隐私政策
 

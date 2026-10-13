@@ -81,6 +81,16 @@
 #define IOS18_SDK_ALLOWED YES
 #endif
 
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 260000
+/// 当前编译使用的 Base SDK 版本为 iOS 26.0 及以上
+#define IOS26_SDK_ALLOWED YES
+#endif
+
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 270000
+/// 当前编译使用的 Base SDK 版本为 iOS 27.0 及以上
+#define IOS27_SDK_ALLOWED YES
+#endif
+
 #pragma mark - Clang
 
 #define ArgumentToString(macro) #macro
@@ -122,21 +132,23 @@
 
 /// 是否横竖屏
 /// 用户界面横屏了才会返回YES
-#define IS_LANDSCAPE UIInterfaceOrientationIsLandscape(UIApplication.sharedApplication.statusBarOrientation)
+#define IS_LANDSCAPE UIInterfaceOrientationIsLandscape(QMUIHelper.interfaceOrientation)
+/// 视图所属 Scene 的横屏状态，适用于多窗口页面布局。
+#define IS_LANDSCAPE_FOR_VIEW(_view) UIInterfaceOrientationIsLandscape([QMUIHelper interfaceOrientationForView:_view])
 /// 无论支不支持横屏，只要设备横屏了，就会返回YES
 #define IS_DEVICE_LANDSCAPE UIDeviceOrientationIsLandscape([[UIDevice currentDevice] orientation])
 
 /// 屏幕宽度，会根据横竖屏的变化而变化
-#define SCREEN_WIDTH ([[UIScreen mainScreen] bounds].size.width)
+#define SCREEN_WIDTH ([QMUIHelper.screen bounds].size.width)
 
 /// 屏幕高度，会根据横竖屏的变化而变化
-#define SCREEN_HEIGHT ([[UIScreen mainScreen] bounds].size.height)
+#define SCREEN_HEIGHT ([QMUIHelper.screen bounds].size.height)
 
 /// 设备宽度，跟横竖屏无关
-#define DEVICE_WIDTH MIN([[UIScreen mainScreen] bounds].size.width, [[UIScreen mainScreen] bounds].size.height)
+#define DEVICE_WIDTH MIN([QMUIHelper.screen bounds].size.width, [QMUIHelper.screen bounds].size.height)
 
 /// 设备高度，跟横竖屏无关
-#define DEVICE_HEIGHT MAX([[UIScreen mainScreen] bounds].size.width, [[UIScreen mainScreen] bounds].size.height)
+#define DEVICE_HEIGHT MAX([QMUIHelper.screen bounds].size.width, [QMUIHelper.screen bounds].size.height)
 
 /// 在 iPad 分屏模式下等于 app 实际运行宽度，否则等同于 SCREEN_WIDTH
 #define APPLICATION_WIDTH [QMUIHelper applicationSize].width
@@ -146,15 +158,21 @@
 
 /// 是否全面屏设备
 #define IS_NOTCHED_SCREEN [QMUIHelper isNotchedScreen]
-/// iPhone 14 Pro Max
+/// 440×956，iPhone 16 / 17 / 18 Pro Max
+#define IS_69INCH_SCREEN [QMUIHelper is69InchScreen]
+/// iPhone 14 / 15 Pro Max、16 Plus
 #define IS_67INCH_SCREEN_AND_IPHONE14 [QMUIHelper is67InchScreenAndiPhone14Later]
 /// iPhone 12 Pro Max
 #define IS_67INCH_SCREEN [QMUIHelper is67InchScreen]
 /// iPhone XS Max
 #define IS_65INCH_SCREEN [QMUIHelper is65InchScreen]
-/// iPhone 14 Pro / 15 Pro
+/// 420×912，iPhone Air
+#define IS_65INCH_SCREEN_AND_IPHONEAIR [QMUIHelper is65InchScreenAndiPhoneAir]
+/// 402×874，iPhone 16 Pro、17 / 17 Pro / 18 Pro
+#define IS_63INCH_SCREEN [QMUIHelper is63InchScreen]
+/// iPhone 14 / 15 Pro、15 / 16
 #define IS_61INCH_SCREEN_AND_IPHONE14PRO [QMUIHelper is61InchScreenAndiPhone14ProLater]
-/// iPhone 12 / 12 Pro
+/// iPhone 12 / 12 Pro / 13 / 13 Pro / 14 / 16e / 17e
 #define IS_61INCH_SCREEN_AND_IPHONE12 [QMUIHelper is61InchScreenAndiPhone12Later]
 /// iPhone XR
 #define IS_61INCH_SCREEN [QMUIHelper is61InchScreen]
@@ -174,7 +192,7 @@
 #define IS_320WIDTH_SCREEN (IS_35INCH_SCREEN || IS_40INCH_SCREEN)
 
 /// 是否Retina
-#define IS_RETINASCREEN ([[UIScreen mainScreen] scale] >= 2.0)
+#define IS_RETINASCREEN ([QMUIHelper.screen scale] >= 2.0)
 
 /// 是否放大模式（iPhone 6及以上的设备支持放大模式，iPhone X 除外）
 #define IS_ZOOMEDMODE [QMUIHelper isZoomedMode]
@@ -188,29 +206,38 @@
 #define PixelOne [QMUIHelper pixelOne]
 
 /// bounds && nativeBounds / scale && nativeScale
-#define ScreenBoundsSize ([[UIScreen mainScreen] bounds].size)
-#define ScreenNativeBoundsSize ([[UIScreen mainScreen] nativeBounds].size)
-#define ScreenScale ([[UIScreen mainScreen] scale])
-#define ScreenNativeScale ([[UIScreen mainScreen] nativeScale])
+#define ScreenBoundsSize ([QMUIHelper.screen bounds].size)
+#define ScreenNativeBoundsSize ([QMUIHelper.screen nativeBounds].size)
+#define ScreenScale ([QMUIHelper.screen scale])
+#define ScreenNativeScale ([QMUIHelper.screen nativeScale])
 
 /// toolBar相关frame
 #define ToolBarHeight (IS_IPAD ? (IS_NOTCHED_SCREEN ? 70 : 50) : (IS_LANDSCAPE ? PreferredValueForVisualDevice(44, 32) : 44) + SafeAreaInsetsConstantForDeviceWithNotch.bottom)
 
-/// tabBar相关frame
+/// tabBar 兼容高度；新页面请使用 tabBar.bounds.height 或 TabBarHeightForViewController。
 #define TabBarHeight (IS_IPAD ? (IS_NOTCHED_SCREEN ? 65 : 50) : (IS_LANDSCAPE ? PreferredValueForVisualDevice(49, 32) : 49) + SafeAreaInsetsConstantForDeviceWithNotch.bottom)
 
 /// 状态栏高度(来电等情况下，状态栏高度会发生变化，所以应该实时计算，iOS 13 起，来电等情况下状态栏高度不会改变)
-#define StatusBarHeight (UIApplication.sharedApplication.statusBarHidden ? 0 : UIApplication.sharedApplication.statusBarFrame.size.height)
+#define StatusBarHeight (QMUIHelper.statusBarHeight)
 
 /// 状态栏高度(如果状态栏不可见，也会返回一个普通状态下可见的高度)
 #define StatusBarHeightConstant [QMUIHelper statusBarHeightConstant]
 
-/// navigationBar 的静态高度
+/// navigationBar 兼容高度；新页面请使用 navigationBar.bounds.height 或 NavigationBarHeightForViewController。
 #define NavigationBarHeight (IS_IPAD ? 50 : (IS_LANDSCAPE ? PreferredValueForVisualDevice(44, 32) : 44))
+
+/// 页面导航栏的实际高度，优先读取 UIKit 当前布局结果；无页面上下文时回退到 NavigationBarHeight。
+#define NavigationBarHeightForViewController(_viewController) [QMUIHelper navigationBarHeightForViewController:_viewController]
+
+/// 页面 TabBar 的实际高度，优先读取 UIKit 当前布局结果；无页面上下文时回退到 TabBarHeight。
+#define TabBarHeightForViewController(_viewController) [QMUIHelper tabBarHeightForViewController:_viewController]
 
 /// 代表(导航栏+状态栏)，这里用于获取其高度
 /// @warn 如果是用于 viewController，请使用 UIViewController(QMUI) qmui_navigationBarMaxYInViewCoordinator 代替
 #define NavigationContentTop (StatusBarHeight + NavigationBarHeight)
+
+/// 页面当前导航栏和安全区的顶部占位；优先使用 UIViewController 的实际窗口布局。
+#define NavigationContentTopForViewController(_viewController) ([QMUIHelper safeAreaInsetsForView:(_viewController).view].top + NavigationBarHeightForViewController(_viewController))
 
 /// 同上，这里用于获取它的静态常量值
 #define NavigationContentTopConstant (QMUIHelper.navigationBarMaxYConstant)
@@ -220,6 +247,9 @@
 
 /// iPhoneX 系列全面屏手机的安全区域的静态值
 #define SafeAreaInsetsConstantForDeviceWithNotch [QMUIHelper safeAreaInsetsForDeviceWithNotch]
+
+/// 当前视图所属窗口的安全区域，适用于多窗口、分屏和折叠屏布局；参数应传入正在布局的 view。
+#define SafeAreaInsetsForView(_view) [QMUIHelper safeAreaInsetsForView:_view]
 
 /// 将所有屏幕按照宽松/紧凑分类，其中 iPad、iPhone XS Max/XR/Plus 均为宽松屏幕，但开启了放大模式的设备均会视为紧凑屏幕
 #define PreferredValueForVisualDevice(_regular, _compact) ([QMUIHelper isRegularScreen] ? _regular : _compact)

@@ -57,8 +57,8 @@
     [self.originImageCheckboxButton setImage:UIImageMake(@"origin_image_checkbox_checked") forState:UIControlStateSelected];
     [self.originImageCheckboxButton setImage:UIImageMake(@"origin_image_checkbox_checked") forState:UIControlStateSelected|UIControlStateHighlighted];
     [self.originImageCheckboxButton setTitle:@"原图" forState:UIControlStateNormal];
-    [self.originImageCheckboxButton setImageEdgeInsets:UIEdgeInsetsMake(0, -5.0f, 0, 5.0f)];
-    [self.originImageCheckboxButton setContentEdgeInsets:UIEdgeInsetsMake(0, 5.0f, 0, 0)];
+    [self.originImageCheckboxButton setQmui_imageInsets:UIEdgeInsetsMake(0, -5.0f, 0, 5.0f)];
+    [self.originImageCheckboxButton setQmui_contentInsets:UIEdgeInsetsMake(0, 5.0f, 0, 0)];
     [self.originImageCheckboxButton sizeToFit];
     self.originImageCheckboxButton.qmui_outsideEdge = UIEdgeInsetsMake(-6.0f, -6.0f, -6.0f, -6.0f);
     [self.originImageCheckboxButton addTarget:self action:@selector(handleOriginImageCheckboxButtonClick:) forControlEvents:UIControlEventTouchUpInside];

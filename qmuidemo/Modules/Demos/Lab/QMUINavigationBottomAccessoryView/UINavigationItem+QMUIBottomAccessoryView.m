@@ -121,8 +121,9 @@ static char kAssociatedObjectKey_bottomAccessoryView;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_bottomAccessoryView, qmui_bottomAccessoryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     
     // 系统在修改了 UINavigationItem.rightBarButtonItem/titleView 等属性后会通过这个私有方法去通知 navigationBar 刷新内部的按钮，这里也借助这个方法在 navigationBar 内部刷新 bottomAccessoryView
-    BOOL animated = YES;
-    [self qmui_performSelector:NSSelectorFromString(@"updateNavigationBarButtonsAnimated:") withArguments:&animated, nil];
+    // 直接刷新本 Demo 的附件视图，不再调用可能被移除的系统私有更新方法。
+    UINavigationBar *bar = self.qmui_navigationBar;
+    if (bar.topItem == self) [bar setQmuibav_bottomAccessoryView:qmui_bottomAccessoryView animated:YES];
 }
 
 - (__kindof UIView *)qmui_bottomAccessoryView {
@@ -150,7 +151,9 @@ static char kAssociatedObjectKey_accessoryView;
                 return;
             }
             
-            UIVisualEffectView *effectView = [selfObject qmui_valueForKey:@"_effectView1"];
+            // 玻璃导航栏背景由系统布局；旧系统按实际效果视图扩展。
+            if (@available(iOS 26.0, *)) return;
+            UIVisualEffectView *effectView = navigationBar.qmui_effectView;
             if (navigationBar.qmuibav_backgroundEffectViewExtendBottomBlock) {
                 if (effectView) {
                     effectView.frame = CGRectSetHeight(effectView.frame, CGRectGetHeight(selfObject.bounds) + navigationBar.qmuibav_backgroundEffectViewExtendBottomBlock());
@@ -180,7 +183,7 @@ static char kAssociatedObjectKey_accessoryView;
     if (shouldAnimate) {
         if (prefersToShow) {
             objc_setAssociatedObject(self, &kAssociatedObjectKey_accessoryView, qmuibav_bottomAccessoryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            [self addSubview:qmuibav_bottomAccessoryView];
+            if (qmuibav_bottomAccessoryView) [self addSubview:qmuibav_bottomAccessoryView];
             [self.qmui_backgroundView setNeedsLayout];
             [self.qmui_backgroundView layoutIfNeeded];
             [self setNeedsLayout];
@@ -211,7 +214,7 @@ static char kAssociatedObjectKey_accessoryView;
         // 这个分支包含无动画、有动画但 setter 前和 setter 后都有存在 bottomAccessoryView
         if (self.qmuibav_bottomAccessoryView != qmuibav_bottomAccessoryView) {
             [self.qmuibav_bottomAccessoryView removeFromSuperview];
-            [self addSubview:qmuibav_bottomAccessoryView];
+            if (qmuibav_bottomAccessoryView) [self addSubview:qmuibav_bottomAccessoryView];
         }
         objc_setAssociatedObject(self, &kAssociatedObjectKey_accessoryView, qmuibav_bottomAccessoryView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         

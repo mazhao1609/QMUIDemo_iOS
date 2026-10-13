@@ -15,6 +15,7 @@
 
 #import "UIViewController+QMUI.h"
 #import "UINavigationController+QMUI.h"
+#import "QMUINavigationController.h"
 #import "QMUICore.h"
 #import "UIInterface+QMUI.h"
 #import "NSObject+QMUI.h"
@@ -24,6 +25,7 @@
 NSNotificationName const QMUIAppSizeWillChangeNotification = @"QMUIAppSizeWillChangeNotification";
 NSString *const QMUIPrecedingAppSizeUserInfoKey = @"QMUIPrecedingAppSizeUserInfoKey";
 NSString *const QMUIFollowingAppSizeUserInfoKey = @"QMUIFollowingAppSizeUserInfoKey";
+NSString *const QMUISourceWindowUserInfoKey = @"QMUISourceWindowUserInfoKey";
 
 @implementation UIViewController (QMUI)
 
@@ -62,11 +64,12 @@ QMUISynthesizeIdCopyProperty(qmui_prefersHomeIndicatorAutoHiddenBlock, setQmui_p
         OverrideImplementation([UIViewController class], @selector(viewWillTransitionToSize:withTransitionCoordinator:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(UIViewController *selfObject, CGSize size, id<UIViewControllerTransitionCoordinator> coordinator) {
                 
-                if (selfObject == UIApplication.sharedApplication.delegate.window.rootViewController) {
-                    CGSize originalSize = selfObject.view.frame.size;
+                UIWindow *window = selfObject.viewIfLoaded.window ?: [QMUIHelper windowForView:selfObject.viewIfLoaded];
+                if (window && selfObject == window.rootViewController) {
+                    CGSize originalSize = window.bounds.size;
                     BOOL sizeChanged = !CGSizeEqualToSize(originalSize, size);
                     if (sizeChanged) {
-                        [[NSNotificationCenter defaultCenter] postNotificationName:QMUIAppSizeWillChangeNotification object:nil userInfo:@{QMUIPrecedingAppSizeUserInfoKey: @(originalSize), QMUIFollowingAppSizeUserInfoKey: @(size)}];
+                        [[NSNotificationCenter defaultCenter] postNotificationName:QMUIAppSizeWillChangeNotification object:nil userInfo:@{QMUIPrecedingAppSizeUserInfoKey: @(originalSize), QMUIFollowingAppSizeUserInfoKey: @(size), QMUISourceWindowUserInfoKey: window}];
                     }
                 }
                 
@@ -318,6 +321,22 @@ static char kAssociatedObjectKey_visibleState;
     
     // 手势返回过程中 self.navigationController 已经不存在了，所以暂时通过遍历 view 层级的方式去获取到 navigationController 的引用
     UINavigationController *navigationController = self.navigationController;
+    if (@available(iOS 26.0, *)) {
+        if (!navigationController) {
+            // 被 pop 的页面可能已经离栈，先从公开转场上下文找仍在栈内的另一页。
+            id<UIViewControllerTransitionCoordinator> coordinator = self.transitionCoordinator;
+            UIViewController *to = [coordinator viewControllerForKey:UITransitionContextToViewControllerKey];
+            UIViewController *from = [coordinator viewControllerForKey:UITransitionContextFromViewControllerKey];
+            if (coordinator.presentationStyle == UIModalPresentationNone) {
+                navigationController = to.navigationController ?: from.navigationController;
+            }
+            // 新系统与自定义容器的中间层数量不固定，不再假定只有两层 superview。
+            for (UIView *ancestor = self.view.superview; ancestor && !navigationController; ancestor = ancestor.superview) {
+                UIViewController *owner = ancestor.qmui_viewController;
+                if ([owner isKindOfClass:UINavigationController.class]) navigationController = (id)owner;
+            }
+        }
+    }
     if (!navigationController) {
         navigationController = self.view.superview.superview.qmui_viewController;
         if (![navigationController isKindOfClass:[UINavigationController class]]) {
@@ -330,6 +349,34 @@ static char kAssociatedObjectKey_visibleState;
     }
     
     UINavigationBar *navigationBar = navigationController.navigationBar;
+    if (@available(iOS 26.0, *)) {
+        // 新导航栏的横向 frame 在首次布局后才更新，不能据此推断各页显隐状态。
+        UIViewController *page = self;
+        while (page.parentViewController && page.parentViewController != navigationController) {
+            page = page.parentViewController;
+        }
+        id<UIViewControllerTransitionCoordinator> coordinator = self.transitionCoordinator ?: navigationController.transitionCoordinator;
+        BOOL pageIsTransitioning = navigationController.qmui_isPushing || navigationController.qmui_isPopping ||
+            (coordinator.presentationStyle == UIModalPresentationNone &&
+             (page == [coordinator viewControllerForKey:UITransitionContextFromViewControllerKey] ||
+              page == [coordinator viewControllerForKey:UITransitionContextToViewControllerKey]));
+        BOOL hidden = navigationController.navigationBarHidden;
+        if (pageIsTransitioning && [page conformsToProtocol:@protocol(QMUICustomNavigationBarTransitionDelegate)]) {
+            UIViewController<QMUICustomNavigationBarTransitionDelegate> *appearancePage = (id)page;
+            if ([appearancePage respondsToSelector:@selector(shouldCustomizeNavigationBarTransitionIfHideable)] &&
+                [appearancePage shouldCustomizeNavigationBarTransitionIfHideable] &&
+                [appearancePage respondsToSelector:@selector(preferredNavigationBarHidden)]) {
+                // 转场两页各自保留占位，目标页修改共享 bar 时不能带动原页上下跳动。
+                hidden = [appearancePage preferredNavigationBarHidden];
+            }
+        }
+        if (hidden || !navigationBar.superview) return 0;
+        CGRect frame = [self.view convertRect:navigationBar.bounds fromView:navigationBar];
+        if (!CGRectIsValidated(frame) || CGRectGetHeight(frame) <= 0) return 0;
+        // 只求纵向交集；push/pop 时页面和共享导航栏横向分离不影响纵向占位。
+        if (CGRectGetMaxY(frame) <= CGRectGetMinY(self.view.bounds) || CGRectGetMinY(frame) >= CGRectGetMaxY(self.view.bounds)) return 0;
+        return MIN(CGRectGetMaxY(frame), CGRectGetMaxY(self.view.bounds));
+    }
     CGFloat barMinX = CGRectGetMinX(navigationBar.frame);
     CGFloat barPresentationMinX = CGRectGetMinX(navigationBar.layer.presentationLayer.frame);
     CGFloat superviewX = CGRectGetMinX(self.view.superview.frame);
@@ -587,7 +634,7 @@ QMUISynthesizeBOOLProperty(qmui_willAppearByInteractivePopGestureRecognizer, set
 @implementation QMUIHelper (ViewController)
 
 + (nullable UIViewController *)visibleViewController {
-    UIViewController *rootViewController = UIApplication.sharedApplication.delegate.window.rootViewController;
+    UIViewController *rootViewController = QMUIHelper.mainWindow.rootViewController;
     UIViewController *visibleViewController = [rootViewController qmui_visibleViewControllerIfExist];
     return visibleViewController;
 }

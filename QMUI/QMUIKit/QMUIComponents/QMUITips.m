@@ -50,7 +50,8 @@ const NSInteger QMUITipsAutomaticallyHideToastSeconds = -1;
 }
 
 - (void)showLoading:(NSString *)text detailText:(NSString *)detailText hideAfterDelay:(NSTimeInterval)delay {
-    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    indicator.color = UIColor.whiteColor;
     [indicator startAnimating];
     self.contentCustomView = indicator;
     [self showTipWithText:text detailText:detailText hideAfterDelay:delay];

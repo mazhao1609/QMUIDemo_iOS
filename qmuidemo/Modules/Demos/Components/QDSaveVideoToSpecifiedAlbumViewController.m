@@ -7,7 +7,7 @@
 //
 
 #import "QDSaveVideoToSpecifiedAlbumViewController.h"
-#import <MobileCoreServices/MobileCoreServices.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface QDSaveVideoToSpecifiedAlbumViewController ()<UINavigationControllerDelegate,UIImagePickerControllerDelegate>
 
@@ -81,7 +81,8 @@
         if (!self.pickerController) {
             self.pickerController = [[UIImagePickerController alloc] init];
             self.pickerController.sourceType = UIImagePickerControllerSourceTypeCamera;
-            self.pickerController.mediaTypes = [[NSArray alloc] initWithObjects:(NSString *)kUTTypeMovie, nil];;
+            // iOS 15 起使用公开的 UTType 标识替代旧 CoreServices 常量。
+            self.pickerController.mediaTypes = @[UTTypeMovie.identifier];
             self.pickerController.delegate = self;
         }
         

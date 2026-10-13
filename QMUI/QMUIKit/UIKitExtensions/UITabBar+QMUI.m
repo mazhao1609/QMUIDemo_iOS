@@ -63,16 +63,17 @@ QMUISynthesizeNSIntegerProperty(tabBarItemViewTouchCount, setTabBarItemViewTouch
         OverrideImplementation([UITabBar class], @selector(setSelectedItem:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(UITabBar *selfObject, UITabBarItem *selectedItem) {
                 
-                NSInteger olderSelectedIndex = selfObject.selectedItem ? [selfObject.items indexOfObject:selfObject.selectedItem] : -1;
+                NSInteger olderSelectedIndex = selfObject.selectedItem ? [selfObject.items indexOfObject:selfObject.selectedItem] : NSNotFound;
                 
                 // call super
                 void (*originSelectorIMP)(id, SEL, UITabBarItem *);
                 originSelectorIMP = (void (*)(id, SEL, UITabBarItem *))originalIMPProvider();
                 originSelectorIMP(selfObject, originCMD, selectedItem);
                 
-                NSInteger newerSelectedIndex = [selfObject.items indexOfObject:selectedItem];
+                // UIKit 允许清空选中项，不把 nil 传给 NSArray 的查找接口。
+                NSInteger newerSelectedIndex = selectedItem ? [selfObject.items indexOfObject:selectedItem] : NSNotFound;
                 // 只有双击当前正在显示的界面的 tabBarItem，才能正常触发双击事件
-                selfObject.canItemRespondDoubleTouch = olderSelectedIndex == newerSelectedIndex;
+                selfObject.canItemRespondDoubleTouch = newerSelectedIndex != NSNotFound && olderSelectedIndex == newerSelectedIndex;
             };
         });
         

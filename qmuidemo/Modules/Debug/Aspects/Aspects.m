@@ -6,7 +6,7 @@
 //
 
 #import "Aspects.h"
-#import <libkern/OSAtomic.h>
+#import <os/lock.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
@@ -114,13 +114,18 @@ static NSString *const AspectsMessagePrefix = @"aspects_";
 ///////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark - Private Helper
 
-static id aspect_add(id self, SEL selector, AspectOptions options, id block, NSError **error) {
+static id aspect_add(id self, SEL selector, AspectOptions options, id block, NSError **outError) {
     NSCParameterAssert(self);
     NSCParameterAssert(selector);
     NSCParameterAssert(block);
 
     __block AspectIdentifier *identifier = nil;
+    __block NSError *localError = nil;
+    BOOL capturesError = outError != NULL;
     aspect_performLocked(^{
+        // 锁内使用本地错误变量，避免 block 捕获调用方的 autoreleasing 输出指针。
+        NSError *__autoreleasing blockError = nil;
+        NSError *__autoreleasing *error = capturesError ? &blockError : NULL;
         if (aspect_isSelectorAllowedAndTrack(self, selector, options, error)) {
             AspectsContainer *aspectContainer = aspect_getContainerForObject(self, selector);
             identifier = [AspectIdentifier identifierWithSelector:selector object:self options:options block:block error:error];
@@ -131,15 +136,22 @@ static id aspect_add(id self, SEL selector, AspectOptions options, id block, NSE
                 aspect_prepareClassAndHookSelector(self, selector, error);
             }
         }
+        localError = blockError;
     });
+    if (outError && localError) *outError = localError;
     return identifier;
 }
 
-static BOOL aspect_remove(AspectIdentifier *aspect, NSError **error) {
+static BOOL aspect_remove(AspectIdentifier *aspect, NSError **outError) {
     NSCAssert([aspect isKindOfClass:AspectIdentifier.class], @"Must have correct type.");
 
     __block BOOL success = NO;
+    __block NSError *localError = nil;
+    BOOL capturesError = outError != NULL;
     aspect_performLocked(^{
+        // 成功时不改写调用方错误；失败时在同步 block 结束后统一写回。
+        NSError *__autoreleasing blockError = nil;
+        NSError *__autoreleasing *error = capturesError ? &blockError : NULL;
         id self = aspect.object; // strongify
         if (self) {
             AspectsContainer *aspectContainer = aspect_getContainerForObject(self, aspect.selector);
@@ -154,15 +166,21 @@ static BOOL aspect_remove(AspectIdentifier *aspect, NSError **error) {
             NSString *errrorDesc = [NSString stringWithFormat:@"Unable to deregister hook. Object already deallocated: %@", aspect];
             AspectError(AspectErrorRemoveObjectAlreadyDeallocated, errrorDesc);
         }
+        localError = blockError;
     });
+    if (outError && localError) *outError = localError;
     return success;
 }
 
 static void aspect_performLocked(dispatch_block_t block) {
-    static OSSpinLock aspect_lock = OS_SPINLOCK_INIT;
-    OSSpinLockLock(&aspect_lock);
-    block();
-    OSSpinLockUnlock(&aspect_lock);
+    // 使用系统推荐的锁，避免旧自旋锁的弃用警告及优先级反转。
+    static os_unfair_lock aspect_lock = OS_UNFAIR_LOCK_INIT;
+    os_unfair_lock_lock(&aspect_lock);
+    @try {
+        block();
+    } @finally {
+        os_unfair_lock_unlock(&aspect_lock);
+    }
 }
 
 static SEL aspect_aliasForSelector(SEL selector) {

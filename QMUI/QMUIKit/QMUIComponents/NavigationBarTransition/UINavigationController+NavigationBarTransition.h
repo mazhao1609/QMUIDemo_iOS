@@ -17,7 +17,8 @@
 #import <UIKit/UIKit.h>
 
 /**
- *  因为系统的UINavigationController只有一个navBar，所以会导致在切换controller的时候，如果两个controller的navBar状态不一致（包括backgroundImgae、shadowImage、barTintColor等等），就会导致在刚要切换的瞬间，navBar的状态都立马变成下一个controller所设置的样式了，为了解决这种情况，QMUI给出了一个方案，有四个方法可以决定你在转场的时候要不要使用自定义的navBar来模仿真实的navBar。
+ *  iOS 15–25 通过独立的转场导航栏保留前后页面各自的背景，避免共享导航栏的样式瞬间切换；可通过 QMUICustomNavigationBarTransitionDelegate 控制此行为。
+ *  iOS 26 及以后使用每个页面的 UINavigationItem appearance。需要自定义转场时只将前后页背景放到各自页面上随页面移动，标题、按钮、玻璃控件和手势继续使用系统转场；完成或取消后恢复系统背景，不复制玻璃导航栏。
  */
 @interface UINavigationController (NavigationBarTransition)
 

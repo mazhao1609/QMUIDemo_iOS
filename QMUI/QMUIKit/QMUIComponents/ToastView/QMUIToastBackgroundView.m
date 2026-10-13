@@ -36,17 +36,22 @@
 - (void)setShouldBlurBackgroundView:(BOOL)shouldBlurBackgroundView {
     _shouldBlurBackgroundView = shouldBlurBackgroundView;
     if (shouldBlurBackgroundView) {
-        UIBlurEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
-        _effectView = [[UIVisualEffectView alloc] initWithEffect:effect];
+        // 普通磨砂背景只创建一次，避免重复设置时叠加效果视图。
+        if (!self.effectView) {
+            _effectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleLight]];
+            [self addSubview:self.effectView];
+        }
+        self.backgroundColor = self.styleColor;
         self.effectView.layer.cornerRadius = self.cornerRadius;
         self.effectView.layer.masksToBounds = YES;
-        [self addSubview:self.effectView];
     } else {
         if (self.effectView) {
             [self.effectView removeFromSuperview];
             _effectView = nil;
         }
+        self.backgroundColor = self.styleColor;
     }
+    [self setNeedsLayout];
 }
 
 - (void)layoutSubviews {

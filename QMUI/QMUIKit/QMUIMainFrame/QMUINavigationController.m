@@ -49,6 +49,19 @@
 /// 即将要被pop的controller
 @property(nonatomic, weak) UIViewController *viewControllerPopping;
 
+/// 只监听真实的系统手势，布局时补齐 UIKit 延后创建或替换的手势。
+@property(nonatomic, weak) UIGestureRecognizer *observedEdgePopGestureRecognizer;
+@property(nonatomic, weak) UIGestureRecognizer *observedContentPopGestureRecognizer;
+
+/// 松手时系统可能已移除转场协调器，保留本次手势的转场双方和最终结果。
+@property(nonatomic, weak) UIGestureRecognizer *activePopGestureRecognizer;
+@property(nonatomic, strong) id<UIViewControllerTransitionCoordinator> interactivePopTransitionCoordinator;
+@property(nonatomic, strong) UIViewController *interactivePopFromViewController;
+@property(nonatomic, strong) UIViewController *interactivePopToViewController;
+@property(nonatomic, assign) BOOL interactivePopInteractionFinished;
+@property(nonatomic, assign) BOOL interactivePopCancelled;
+@property(nonatomic, assign) BOOL interactivePopCompletionPending;
+
 @end
 
 @interface UIViewController (QMUINavigationControllerTransition)
@@ -144,14 +157,20 @@ static char kAssociatedObjectKey_qmui_viewWillAppearNotifyDelegate;
 }
 
 - (void)dealloc {
+    [self.observedEdgePopGestureRecognizer removeTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+    [self.observedContentPopGestureRecognizer removeTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
     self.delegate = nil;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // 手势允许多次addTarget
-    [self.interactivePopGestureRecognizer addTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+    [self qmui_updateInteractivePopGestureObservers];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self qmui_updateInteractivePopGestureObservers];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -367,58 +386,143 @@ static char kAssociatedObjectKey_qmui_viewWillAppearNotifyDelegate;
     return _isViewControllerTransiting;
 }
 
-// 接管系统手势返回的回调
-- (void)handleInteractivePopGestureRecognizer:(UIScreenEdgePanGestureRecognizer *)gestureRecognizer {
-    UIGestureRecognizerState state = gestureRecognizer.state;
-    
-    UIViewController<QMUINavigationControllerTransitionDelegate> *viewControllerWillDisappear = [self.transitionCoordinator viewControllerForKey:UITransitionContextFromViewControllerKey];
-    UIViewController<QMUINavigationControllerTransitionDelegate> *viewControllerWillAppear = [self.transitionCoordinator viewControllerForKey:UITransitionContextToViewControllerKey];
-    
-    viewControllerWillDisappear.qmui_poppingByInteractivePopGestureRecognizer = YES;
-    viewControllerWillDisappear.qmui_willAppearByInteractivePopGestureRecognizer = NO;
-    
-    viewControllerWillAppear.qmui_poppingByInteractivePopGestureRecognizer = NO;
-    viewControllerWillAppear.qmui_willAppearByInteractivePopGestureRecognizer = YES;
-    
-    if (state == UIGestureRecognizerStateBegan) {
-        // UIGestureRecognizerStateBegan 对应 viewWillAppear:，只要在 viewWillAppear: 里的修改都是安全的，但只要过了 viewWillAppear:，后续的修改都是不安全的，所以这里用 dispatch 的方式将标志位的赋值放到 viewWillAppear: 的下一个 Runloop 里
-        dispatch_async(dispatch_get_main_queue(), ^{
-            viewControllerWillDisappear.qmui_navigationControllerPopGestureRecognizerChanging = YES;
-            viewControllerWillAppear.qmui_navigationControllerPopGestureRecognizerChanging = YES;
-        });
-    } else if (state > UIGestureRecognizerStateChanged) {
-        viewControllerWillDisappear.qmui_navigationControllerPopGestureRecognizerChanging = NO;
-        viewControllerWillAppear.qmui_navigationControllerPopGestureRecognizerChanging = NO;
+- (void)qmui_updateInteractivePopGestureObservers {
+    UIGestureRecognizer *edgePop = self.interactivePopGestureRecognizer;
+    if (self.observedEdgePopGestureRecognizer != edgePop) {
+        [self.observedEdgePopGestureRecognizer removeTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+        [edgePop addTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+        self.observedEdgePopGestureRecognizer = edgePop;
     }
-    
-    if (state == UIGestureRecognizerStateEnded) {
-        if (self.transitionCoordinator.cancelled) {
-            QMUILog(NSStringFromClass(self.class), @"interactivePopGestureRecognizer canceled");
-            UIViewController<QMUINavigationControllerTransitionDelegate> *temp = viewControllerWillDisappear;
-            viewControllerWillDisappear = viewControllerWillAppear;
-            viewControllerWillAppear = temp;
-        } else {
-            QMUILog(NSStringFromClass(self.class), @"interactivePopGestureRecognizer triggered");
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 260000
+    if (@available(iOS 26.0, *)) {
+        UIGestureRecognizer *contentPop = self.interactiveContentPopGestureRecognizer;
+        if (self.observedContentPopGestureRecognizer != contentPop) {
+            [self.observedContentPopGestureRecognizer removeTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+            if (contentPop != edgePop) {
+                [contentPop addTarget:self action:@selector(handleInteractivePopGestureRecognizer:)];
+            }
+            self.observedContentPopGestureRecognizer = contentPop;
         }
     }
-    
-    if ([viewControllerWillDisappear respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:isCancelled:viewControllerWillDisappear:viewControllerWillAppear:)]) {
-        [((UIViewController<QMUINavigationControllerTransitionDelegate> *)viewControllerWillDisappear) navigationController:self poppingByInteractiveGestureRecognizer:gestureRecognizer isCancelled:self.transitionCoordinator.cancelled viewControllerWillDisappear:viewControllerWillDisappear viewControllerWillAppear:viewControllerWillAppear];
+#endif
+}
+
+// 监听系统边缘与内容返回，不改变其 delegate、enabled 或系统转场 target。
+- (void)handleInteractivePopGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer {
+    UIGestureRecognizerState state = gestureRecognizer.state;
+    if (state == UIGestureRecognizerStatePossible || (self.activePopGestureRecognizer && self.activePopGestureRecognizer != gestureRecognizer)) return;
+
+    if (!self.activePopGestureRecognizer) {
+        if (state == UIGestureRecognizerStateFailed || state == UIGestureRecognizerStateCancelled) return;
+        id<UIViewControllerTransitionCoordinator> coordinator = self.transitionCoordinator;
+        UIViewController *from = [coordinator viewControllerForKey:UITransitionContextFromViewControllerKey];
+        UIViewController *to = [coordinator viewControllerForKey:UITransitionContextToViewControllerKey];
+        if (!coordinator.initiallyInteractive || !from || !to) {
+            // target 调用顺序不固定，开始时尚未建立系统转场则在下一次主线程调度补取一次。
+            if (state == UIGestureRecognizerStateBegan) {
+                __weak __typeof(self) weakSelf = self;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong __typeof(weakSelf) strongSelf = weakSelf;
+                    if (strongSelf && !strongSelf.activePopGestureRecognizer && strongSelf.transitionCoordinator.initiallyInteractive && (gestureRecognizer.state == UIGestureRecognizerStateBegan || gestureRecognizer.state == UIGestureRecognizerStateChanged)) {
+                        [strongSelf handleInteractivePopGestureRecognizer:gestureRecognizer];
+                    }
+                });
+            }
+            return;
+        }
+
+        self.activePopGestureRecognizer = gestureRecognizer;
+        self.interactivePopTransitionCoordinator = coordinator;
+        self.interactivePopFromViewController = from;
+        self.interactivePopToViewController = to;
+        self.interactivePopInteractionFinished = !coordinator.interactive;
+        self.interactivePopCancelled = coordinator.cancelled;
+        self.interactivePopCompletionPending = NO;
+        from.qmui_poppingByInteractivePopGestureRecognizer = YES;
+        from.qmui_willAppearByInteractivePopGestureRecognizer = NO;
+        to.qmui_poppingByInteractivePopGestureRecognizer = NO;
+        to.qmui_willAppearByInteractivePopGestureRecognizer = YES;
+
+        if (coordinator.interactive) {
+            __weak __typeof(self) weakSelf = self;
+            __weak UIGestureRecognizer *weakGesture = gestureRecognizer;
+            __weak id<UIViewControllerTransitionCoordinator> weakCoordinator = coordinator;
+            [coordinator notifyWhenInteractionChangesUsingBlock:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+                __strong __typeof(weakSelf) strongSelf = weakSelf;
+                UIGestureRecognizer *gesture = weakGesture;
+                if (!strongSelf || !gesture || strongSelf.activePopGestureRecognizer != gesture || strongSelf.interactivePopTransitionCoordinator != weakCoordinator) return;
+                // 等待 UIKit 确定完成/取消，避免我们的松手回调先于系统 target 时误报成功。
+                strongSelf.interactivePopInteractionFinished = YES;
+                strongSelf.interactivePopCancelled = context.cancelled;
+                if (strongSelf.interactivePopCompletionPending) {
+                    [strongSelf qmui_completeInteractivePopGestureRecognizer:gesture isCancelled:context.cancelled];
+                }
+            }];
+        }
     }
-    
-    if ([viewControllerWillAppear respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:isCancelled:viewControllerWillDisappear:viewControllerWillAppear:)]) {
-        [((UIViewController<QMUINavigationControllerTransitionDelegate> *)viewControllerWillAppear) navigationController:self poppingByInteractiveGestureRecognizer:gestureRecognizer isCancelled:self.transitionCoordinator.cancelled viewControllerWillDisappear:viewControllerWillDisappear viewControllerWillAppear:viewControllerWillAppear];
+
+    UIViewController *from = self.interactivePopFromViewController;
+    UIViewController *to = self.interactivePopToViewController;
+    if (state == UIGestureRecognizerStateBegan) {
+        // viewWillAppear: 后才进入 changing；快速松手后不能被这个延迟任务重新置为 YES。
+        __weak __typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong __typeof(weakSelf) strongSelf = weakSelf;
+            if (strongSelf.activePopGestureRecognizer == gestureRecognizer && (gestureRecognizer.state == UIGestureRecognizerStateBegan || gestureRecognizer.state == UIGestureRecognizerStateChanged)) {
+                from.qmui_navigationControllerPopGestureRecognizerChanging = YES;
+                to.qmui_navigationControllerPopGestureRecognizerChanging = YES;
+            }
+        });
+    } else if (state == UIGestureRecognizerStateChanged) {
+        from.qmui_navigationControllerPopGestureRecognizerChanging = YES;
+        to.qmui_navigationControllerPopGestureRecognizerChanging = YES;
+    } else {
+        from.qmui_navigationControllerPopGestureRecognizerChanging = NO;
+        to.qmui_navigationControllerPopGestureRecognizerChanging = NO;
+        if (state == UIGestureRecognizerStateCancelled || state == UIGestureRecognizerStateFailed) {
+            [self qmui_completeInteractivePopGestureRecognizer:gestureRecognizer isCancelled:YES];
+        } else if (self.interactivePopInteractionFinished) {
+            [self qmui_completeInteractivePopGestureRecognizer:gestureRecognizer isCancelled:self.interactivePopCancelled];
+        } else {
+            self.interactivePopCompletionPending = YES;
+        }
+        return;
     }
-    
-    BeginIgnoreDeprecatedWarning
-    if ([viewControllerWillDisappear respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:viewControllerWillDisappear:viewControllerWillAppear:)]) {
-        [((UIViewController<QMUINavigationControllerTransitionDelegate> *)viewControllerWillDisappear) navigationController:self poppingByInteractiveGestureRecognizer:gestureRecognizer viewControllerWillDisappear:viewControllerWillDisappear viewControllerWillAppear:viewControllerWillAppear];
+
+    [self qmui_notifyInteractivePopGestureRecognizer:gestureRecognizer isCancelled:NO];
+}
+
+- (void)qmui_completeInteractivePopGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer isCancelled:(BOOL)isCancelled {
+    self.interactivePopFromViewController.qmui_navigationControllerPopGestureRecognizerChanging = NO;
+    self.interactivePopToViewController.qmui_navigationControllerPopGestureRecognizerChanging = NO;
+    [self qmui_notifyInteractivePopGestureRecognizer:gestureRecognizer isCancelled:isCancelled];
+    self.activePopGestureRecognizer = nil;
+    self.interactivePopTransitionCoordinator = nil;
+    self.interactivePopFromViewController = nil;
+    self.interactivePopToViewController = nil;
+    self.interactivePopCompletionPending = NO;
+}
+
+- (void)qmui_notifyInteractivePopGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer isCancelled:(BOOL)isCancelled {
+    UIViewController<QMUINavigationControllerTransitionDelegate> *from = (id)self.interactivePopFromViewController;
+    UIViewController<QMUINavigationControllerTransitionDelegate> *to = (id)self.interactivePopToViewController;
+    if (!from || !to) return;
+    if (isCancelled) {
+        UIViewController<QMUINavigationControllerTransitionDelegate> *temp = from;
+        from = to;
+        to = temp;
     }
-    
-    if ([viewControllerWillAppear respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:viewControllerWillDisappear:viewControllerWillAppear:)]) {
-        [((UIViewController<QMUINavigationControllerTransitionDelegate> *)viewControllerWillAppear) navigationController:self poppingByInteractiveGestureRecognizer:gestureRecognizer viewControllerWillDisappear:viewControllerWillDisappear viewControllerWillAppear:viewControllerWillAppear];
+    for (UIViewController<QMUINavigationControllerTransitionDelegate> *vc in @[from, to]) {
+        if ([vc respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:isCancelled:viewControllerWillDisappear:viewControllerWillAppear:)]) {
+            [vc navigationController:self poppingByInteractiveGestureRecognizer:gestureRecognizer isCancelled:isCancelled viewControllerWillDisappear:from viewControllerWillAppear:to];
+        }
+        // 老接口声明的是边缘手势，不能将全屏手势伪装为 UIScreenEdgePanGestureRecognizer。
+        BeginIgnoreDeprecatedWarning
+        if ([gestureRecognizer isKindOfClass:UIScreenEdgePanGestureRecognizer.class] && [vc respondsToSelector:@selector(navigationController:poppingByInteractiveGestureRecognizer:viewControllerWillDisappear:viewControllerWillAppear:)]) {
+            [vc navigationController:self poppingByInteractiveGestureRecognizer:(UIScreenEdgePanGestureRecognizer *)gestureRecognizer viewControllerWillDisappear:from viewControllerWillAppear:to];
+        }
+        EndIgnoreDeprecatedWarning
     }
-    EndIgnoreDeprecatedWarning
 }
 
 - (void)qmui_viewControllerDidInvokeViewWillAppear:(UIViewController *)viewController {

@@ -17,6 +17,7 @@
 #import "QMUICore.h"
 #import "QMUIEmptyView.h"
 #import "UIView+QMUI.h"
+#import "UIViewController+QMUI.h"
 #import "UIImage+QMUI.h"
 #import "UIColor+QMUI.h"
 #import "UIScrollView+QMUI.h"
@@ -147,7 +148,18 @@ static NSUInteger const kTagForCenteredPlayButton = 1;
     
     if (_cloudProgressView && _cloudDownloadRetryButton) {
         CGPoint origin = CGPointMake(12, 12);
-        _cloudDownloadRetryButton.frame = CGRectSetXY(_cloudDownloadRetryButton.frame, origin.x, NavigationContentTopConstant + origin.y);
+        CGFloat navigationContentTop = 0;
+        UIViewController *viewController = self.qmui_viewController;
+        if (viewController) {
+            CGFloat navigationBarMaxY = viewController.qmui_navigationBarMaxYInViewCoordinator;
+            if (navigationBarMaxY > 0) {
+                navigationContentTop = [self convertPoint:CGPointMake(0, navigationBarMaxY) fromView:viewController.view].y;
+            }
+        }
+        if (navigationContentTop <= 0) {
+            navigationContentTop = SafeAreaInsetsForView(self).top + NavigationBarHeightForViewController(viewController);
+        }
+        _cloudDownloadRetryButton.frame = CGRectSetXY(_cloudDownloadRetryButton.frame, origin.x, navigationContentTop + origin.y);
         _cloudProgressView.frame = CGRectSetSize(_cloudProgressView.frame, _cloudDownloadRetryButton.currentImage.size);
         _cloudProgressView.center = _cloudDownloadRetryButton.center;
     }

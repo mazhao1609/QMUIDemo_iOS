@@ -54,7 +54,9 @@ NSString *const kQMUIResourcesBundleName = @"QMUIResources";
     if (!resourceBundle) {
         NSBundle *mainBundle = [NSBundle bundleForClass:self];
         NSString *resourcePath = [mainBundle pathForResource:kQMUIResourcesBundleName ofType:@"bundle"];
-        resourceBundle = [NSBundle bundleWithPath:resourcePath] ?: mainBundle;
+        // Xcode 集成时资源可直接位于 framework 内；没有独立资源包时不要把空路径传给 NSBundle。
+        resourceBundle = resourcePath.length ? [NSBundle bundleWithPath:resourcePath] : nil;
+        resourceBundle = resourceBundle ?: mainBundle;
     }
     UIImage *image = [UIImage imageNamed:name inBundle:resourceBundle compatibleWithTraitCollection:nil];
     return image;
@@ -150,7 +152,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
         keyboardRect.origin.x = 0;
     }
     if (!view) { return CGRectGetHeight(keyboardRect); }
-    CGRect keyboardRectInView = [view convertRect:keyboardRect fromCoordinateSpace:UIScreen.mainScreen.coordinateSpace];
+    CGRect keyboardRectInView = [view convertRect:keyboardRect fromCoordinateSpace:QMUIHelper.screen.coordinateSpace];
     CGRect keyboardVisibleRectInView = CGRectIntersection(view.bounds, keyboardRectInView);
     CGFloat resultHeight = CGRectIsValidated(keyboardVisibleRectInView) ? CGRectGetHeight(keyboardVisibleRectInView) : 0;
     return resultHeight;
@@ -212,7 +214,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 static CGFloat pixelOne = -1.0f;
 + (CGFloat)pixelOne {
     if (pixelOne < 0) {
-        pixelOne = 1 / [[UIScreen mainScreen] scale];
+        pixelOne = 1 / [QMUIHelper.screen scale];
     }
     return pixelOne;
 }
@@ -240,7 +242,11 @@ static CGFloat pixelOne = -1.0f;
     if (IS_SIMULATOR) {
         // Simulator doesn't return the identifier for the actual physical model, but returns it as an environment variable
         // 模拟器不返回物理机器信息，但会通过环境变量的方式返回
-        return [NSString stringWithFormat:@"%s", getenv("SIMULATOR_MODEL_IDENTIFIER")];
+        // 未设置型号环境变量时继续使用 uname，避免把空指针格式化为设备型号。
+        const char *simulatorModel = getenv("SIMULATOR_MODEL_IDENTIFIER");
+        if (simulatorModel && simulatorModel[0]) {
+            return [NSString stringWithUTF8String:simulatorModel];
+        }
     }
     
     // See https://gist.github.com/adamawolf/3048717 for identifiers
@@ -310,6 +316,7 @@ static CGFloat pixelOne = -1.0f;
             @"iPhone14,5" : @"iPhone 13",
             @"iPhone14,2" : @"iPhone 13 Pro",
             @"iPhone14,3" : @"iPhone 13 Pro Max",
+            @"iPhone14,6" : @"iPhone SE (3rd generation)",
             @"iPhone14,7" : @"iPhone 14",
             @"iPhone14,8" : @"iPhone 14 Plus",
             @"iPhone15,2" : @"iPhone 14 Pro",
@@ -322,6 +329,17 @@ static CGFloat pixelOne = -1.0f;
             @"iPhone17,2" : @"iPhone 16 Pro Max",
             @"iPhone17,3" : @"iPhone 16",
             @"iPhone17,4" : @"iPhone 16 Plus",
+            // 新型号标识经 IPSW.me 与 DeviceKit 核对，不根据编号猜测产品名称。
+            @"iPhone17,5" : @"iPhone 16e",
+            @"iPhone18,1" : @"iPhone 17 Pro",
+            @"iPhone18,2" : @"iPhone 17 Pro Max",
+            @"iPhone18,3" : @"iPhone 17",
+            @"iPhone18,4" : @"iPhone Air",
+            @"iPhone18,5" : @"iPhone 17e",
+            @"iPhone19,2" : @"iPhone 18 Pro",
+            @"iPhone19,3" : @"iPhone 18 Pro Max",
+            @"iPhone19,4" : @"iPhone Duo",
+            @"iPhone19,7" : @"iPhone 18 Pro Max",
             
             @"iPad1,1" : @"iPad 1",
             @"iPad2,1" : @"iPad 2 (WiFi)",
@@ -382,6 +400,8 @@ static CGFloat pixelOne = -1.0f;
             @"iPad11,4" : @"iPad Air (3rd generation)",
             @"iPad11,6" : @"iPad (WiFi)",
             @"iPad11,7" : @"iPad (Cellular)",
+            @"iPad12,1" : @"iPad (9th generation, WiFi)",
+            @"iPad12,2" : @"iPad (9th generation, Cellular)",
             @"iPad13,1" : @"iPad Air (4th generation)",
             @"iPad13,2" : @"iPad Air (4th generation)",
             @"iPad13,4" : @"iPad Pro (11 inch, 3rd generation)",
@@ -392,20 +412,40 @@ static CGFloat pixelOne = -1.0f;
             @"iPad13,9" : @"iPad Pro (12.9 inch, 5th generation)",
             @"iPad13,10" : @"iPad Pro (12.9 inch, 5th generation)",
             @"iPad13,11" : @"iPad Pro (12.9 inch, 5th generation)",
+            @"iPad13,16" : @"iPad Air (5th generation, WiFi)",
+            @"iPad13,17" : @"iPad Air (5th generation, Cellular)",
+            @"iPad13,18" : @"iPad (10th generation, WiFi)",
+            @"iPad13,19" : @"iPad (10th generation, Cellular)",
             @"iPad14,1" : @"iPad mini (6th generation)",
             @"iPad14,2" : @"iPad mini (6th generation)",
             @"iPad14,3" : @"iPad Pro 11 inch 4th Gen",
             @"iPad14,4" : @"iPad Pro 11 inch 4th Gen",
             @"iPad14,5" : @"iPad Pro 12.9 inch 6th Gen",
             @"iPad14,6" : @"iPad Pro 12.9 inch 6th Gen",
-            @"iPad14,8" : @"iPad Air 6th Gen",
-            @"iPad14,9" : @"iPad Air 6th Gen",
-            @"iPad14,10" : @"iPad Air 7th Gen",
-            @"iPad14,11" : @"iPad Air 7th Gen",
-            @"iPad16,3" : @"iPad Pro 11 inch 5th Gen",
-            @"iPad16,4" : @"iPad Pro 11 inch 5th Gen",
-            @"iPad16,5" : @"iPad Pro 12.9 inch 7th Gen",
-            @"iPad16,6" : @"iPad Pro 12.9 inch 7th Gen",
+            @"iPad14,8" : @"iPad Air (11 inch, M2, WiFi)",
+            @"iPad14,9" : @"iPad Air (11 inch, M2, Cellular)",
+            @"iPad14,10" : @"iPad Air (13 inch, M2, WiFi)",
+            @"iPad14,11" : @"iPad Air (13 inch, M2, Cellular)",
+            @"iPad15,3" : @"iPad Air (11 inch, M3, WiFi)",
+            @"iPad15,4" : @"iPad Air (11 inch, M3, Cellular)",
+            @"iPad15,5" : @"iPad Air (13 inch, M3, WiFi)",
+            @"iPad15,6" : @"iPad Air (13 inch, M3, Cellular)",
+            @"iPad15,7" : @"iPad (A16, WiFi)",
+            @"iPad15,8" : @"iPad (A16, Cellular)",
+            @"iPad16,1" : @"iPad mini (A17 Pro, WiFi)",
+            @"iPad16,2" : @"iPad mini (A17 Pro, Cellular)",
+            @"iPad16,3" : @"iPad Pro (11 inch, M4, WiFi)",
+            @"iPad16,4" : @"iPad Pro (11 inch, M4, Cellular)",
+            @"iPad16,5" : @"iPad Pro (13 inch, M4, WiFi)",
+            @"iPad16,6" : @"iPad Pro (13 inch, M4, Cellular)",
+            @"iPad16,8" : @"iPad Air (11 inch, M4, WiFi)",
+            @"iPad16,9" : @"iPad Air (11 inch, M4, Cellular)",
+            @"iPad16,10" : @"iPad Air (13 inch, M4, WiFi)",
+            @"iPad16,11" : @"iPad Air (13 inch, M4, Cellular)",
+            @"iPad17,1" : @"iPad Pro (11 inch, M5, WiFi)",
+            @"iPad17,2" : @"iPad Pro (11 inch, M5, Cellular)",
+            @"iPad17,3" : @"iPad Pro (13 inch, M5, WiFi)",
+            @"iPad17,4" : @"iPad Pro (13 inch, M5, Cellular)",
             
             @"iPod1,1" : @"iPod touch 1",
             @"iPod2,1" : @"iPod touch 2",
@@ -417,6 +457,7 @@ static CGFloat pixelOne = -1.0f;
             
             @"i386" : @"Simulator x86",
             @"x86_64" : @"Simulator x64",
+            @"arm64" : @"Simulator arm64",
             
             @"Watch1,1" : @"Apple Watch 38mm",
             @"Watch1,2" : @"Apple Watch 42mm",
@@ -533,6 +574,8 @@ static NSInteger isSimulator = -1;
 
 static NSInteger isNotchedScreen = -1;
 + (BOOL)isNotchedScreen {
+    // 已连接窗口的 Home Indicator 安全区优先于旧版私有屏幕接口，也可修正启动早期缓存的 NO。
+    if (self.keyWindow.safeAreaInsets.bottom > 0) return YES;
     if (isNotchedScreen < 0) {
         /*
          检测方式解释/测试要点：
@@ -544,9 +587,9 @@ static NSInteger isNotchedScreen = -1;
          */
         SEL peripheryInsetsSelector = NSSelectorFromString([NSString stringWithFormat:@"_%@%@", @"periphery", @"Insets"]);
         UIEdgeInsets peripheryInsets = UIEdgeInsetsZero;
-        [[UIScreen mainScreen] qmui_performSelector:peripheryInsetsSelector withPrimitiveReturnValue:&peripheryInsets];
+        [QMUIHelper.screen qmui_performSelector:peripheryInsetsSelector withPrimitiveReturnValue:&peripheryInsets];
         if (peripheryInsets.bottom <= 0) {
-            UIWindow *window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+            UIWindow *window = [[UIWindow alloc] initWithFrame:QMUIHelper.screen.bounds];
             peripheryInsets = window.safeAreaInsets;
             if (peripheryInsets.bottom <= 0) {
                 // 使用一个强制竖屏的 rootViewController，避免一个仅支持竖屏的 App 在横屏启动时会受这里创建的 window 的影响，导致状态栏、safeAreaInsets 等错乱
@@ -564,16 +607,10 @@ static NSInteger isNotchedScreen = -1;
 }
 
 + (BOOL)isRegularScreen {
-    if ([@[
-        @"iPhone 14 Pro",
-        @"iPhone 15",
-        @"iPhone 16",
-    ] qmui_firstMatchWithBlock:^BOOL(NSString *item) {
-        return [QMUIHelper.deviceName hasPrefix:item];
-    }]) {
-        return YES;
-    }
-    return [self isIPad] || (!IS_ZOOMEDMODE && ([self is67InchScreenAndiPhone14Later] || [self is67InchScreen] || [self is65InchScreen] || [self is61InchScreen] || [self is55InchScreen]));
+    // 折叠屏展开、外屏和分屏的设备屏幕尺寸可能不同，按当前 Scene 的窗口宽度分类。
+    CGSize applicationSize = self.applicationSize;
+    CGFloat applicationWidth = MIN(applicationSize.width, applicationSize.height);
+    return self.isIPad || (self.isIPhone && !self.isZoomedMode && applicationWidth >= self.screenSizeFor61InchAndiPhone14ProLater.width);
 }
 
 static NSInteger is69InchScreen = -1;
@@ -608,6 +645,11 @@ static NSInteger is65InchScreen = -1;
         is65InchScreen = (DEVICE_WIDTH == self.screenSizeFor65Inch.width && DEVICE_HEIGHT == self.screenSizeFor65Inch.height && !QMUIHelper.is61InchScreen) ? 1 : 0;
     }
     return is65InchScreen > 0;
+}
+
++ (BOOL)is65InchScreenAndiPhoneAir {
+    // Air 的逻辑尺寸为 420×912，与旧款 6.5 英寸的 414×896 分开判断。
+    return self.isIPhone && CGSizeEqualToSize(CGSizeMake(DEVICE_WIDTH, DEVICE_HEIGHT), self.screenSizeFor65InchAndiPhoneAir);
 }
 
 static NSInteger is63InchScreen = -1;
@@ -708,6 +750,10 @@ static NSInteger is35InchScreen = -1;
     return CGSizeMake(414, 896);
 }
 
++ (CGSize)screenSizeFor65InchAndiPhoneAir {
+    return CGSizeMake(420, 912);
+}
+
 + (CGSize)screenSizeFor61InchAndiPhone14ProLater {
     return CGSizeMake(393, 852);
 }
@@ -755,7 +801,7 @@ static CGFloat preferredLayoutWidth = -1;
                                         @([self screenSizeFor58Inch].width),
                                         @([self screenSizeFor40Inch].width)];
         preferredLayoutWidth = SCREEN_WIDTH;
-        UIWindow *window = UIApplication.sharedApplication.delegate.window ?: [[UIWindow alloc] init];// iOS 9 及以上的系统，新 init 出来的 window 自动被设置为当前 App 的宽度
+        UIWindow *window = QMUIHelper.keyWindow ?: [[UIWindow alloc] init];// iOS 9 及以上的系统，新 init 出来的 window 自动被设置为当前 App 的宽度
         CGFloat windowWidth = CGRectGetWidth(window.bounds);
         for (NSInteger i = 0; i < widths.count; i++) {
             if (windowWidth <= widths[i].qmui_CGFloatValue) {
@@ -768,6 +814,9 @@ static CGFloat preferredLayoutWidth = -1;
 }
 
 + (UIEdgeInsets)safeAreaInsetsForDeviceWithNotch {
+    // 已显示的窗口提供真实安全区，新机型和分屏不再套用旧设备常量。
+    UIWindow *window = self.keyWindow;
+    if (window && !UIEdgeInsetsEqualToEdgeInsets(window.safeAreaInsets, UIEdgeInsetsZero)) return window.safeAreaInsets;
     if (![self isNotchedScreen]) {
         return UIEdgeInsetsZero;
     }
@@ -973,14 +1022,15 @@ static CGFloat preferredLayoutWidth = -1;
     
     NSString *deviceKey = [QMUIHelper deviceModel];
     if (!dict[deviceKey]) {
-        deviceKey = @"iPhone16,1";// 默认按最新的机型处理，因为新出的设备肯定更大概率与上一代设备相似
+        // 新设备通过上面的窗口读取真实安全区，窗口尚未就绪时不套用其他机型常量。
+        return UIEdgeInsetsZero;
     }
     if ([QMUIHelper isZoomedMode]) {
         deviceKey = [NSString stringWithFormat:@"%@-Zoom", deviceKey];
     }
     
     NSNumber *orientationKey = nil;
-    UIInterfaceOrientation orientation = UIApplication.sharedApplication.statusBarOrientation;
+    UIInterfaceOrientation orientation = QMUIHelper.interfaceOrientation;
     switch (orientation) {
         case UIInterfaceOrientationLandscapeLeft:
         case UIInterfaceOrientationLandscapeRight:
@@ -1020,12 +1070,12 @@ static NSInteger isHighPerformanceDevice = -1;
         return NO;
     }
     
-    CGFloat nativeScale = UIScreen.mainScreen.nativeScale;
-    CGFloat scale = UIScreen.mainScreen.scale;
+    CGFloat nativeScale = QMUIHelper.screen.nativeScale;
+    CGFloat scale = QMUIHelper.screen.scale;
     
     // 对于所有的 Plus 系列 iPhone，屏幕物理像素低于软件层面的渲染像素，不管标准模式还是放大模式，nativeScale 均小于 scale，所以需要特殊处理才能准确区分放大模式
     // https://www.paintcodeapp.com/news/ultimate-guide-to-iphone-resolutions
-    BOOL shouldBeDownsampledDevice = CGSizeEqualToSize(UIScreen.mainScreen.nativeBounds.size, CGSizeMake(1080, 1920));
+    BOOL shouldBeDownsampledDevice = CGSizeEqualToSize(QMUIHelper.screen.nativeBounds.size, CGSizeMake(1080, 1920));
     if (shouldBeDownsampledDevice) {
         scale /= 1.15;
     }
@@ -1034,47 +1084,57 @@ static NSInteger isHighPerformanceDevice = -1;
 }
 
 + (BOOL)isDynamicIslandDevice {
-    if (!IS_IPHONE) return NO;
-    if ([@[
-        @"iPhone 14 Pro",
-        @"iPhone 15",
-        @"iPhone 16",
-    ] qmui_firstMatchWithBlock:^BOOL(NSString *item) {
-        return [QMUIHelper.deviceName hasPrefix:item];
-    }]) {
-        return YES;
-    }
-    return NO;
+    if (!self.isIPhone) return NO;
+    static NSSet<NSString *> *models;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // 使用已确认的硬件标识，避免把 16e、17e 或未知型号误判为灵动岛。
+        models = [NSSet setWithArray:@[
+            @"iPhone15,2", @"iPhone15,3", // iPhone 14 Pro / Pro Max
+            @"iPhone15,4", @"iPhone15,5", @"iPhone16,1", @"iPhone16,2", // iPhone 15 系列
+            @"iPhone17,1", @"iPhone17,2", @"iPhone17,3", @"iPhone17,4", // iPhone 16 系列（不含 16e）
+            @"iPhone18,1", @"iPhone18,2", @"iPhone18,3", @"iPhone18,4", // iPhone 17 系列及 Air（不含 17e）
+            @"iPhone19,2", @"iPhone19,3", @"iPhone19,4", @"iPhone19,7", // iPhone 18 Pro / Pro Max、Duo
+        ]];
+    });
+    return [models containsObject:self.deviceModel];
 }
 
 - (void)handleAppSizeWillChange:(NSNotification *)notification {
+    // 折叠屏在展开/闭合时会切换可用尺寸，屏幕分类必须随当前场景重新计算。
+    isNotchedScreen = -1;
+    is69InchScreen = -1;
+    is67InchScreenAndiPhone14Later = -1;
+    is67InchScreen = -1;
+    is65InchScreen = -1;
+    is63InchScreen = -1;
+    is61InchScreenAndiPhone14ProLater = -1;
+    is61InchScreenAndiPhone12Later = -1;
+    is61InchScreen = -1;
+    is58InchScreen = -1;
+    is55InchScreen = -1;
+    is54InchScreen = -1;
+    is47InchScreen = -1;
+    is40InchScreen = -1;
+    is35InchScreen = -1;
+    isHighPerformanceDevice = -1;
     preferredLayoutWidth = -1;
 }
 
 + (CGSize)applicationSize {
-    /// applicationFrame 在 iPad 下返回的 size 要比 window 实际的 size 小，这个差值体现在 origin 上，所以用 origin + size 修正得到正确的大小。
-    BeginIgnoreDeprecatedWarning
-    CGRect applicationFrame = [UIScreen mainScreen].applicationFrame;
-    EndIgnoreDeprecatedWarning
-    CGSize applicationSize = CGSizeMake(applicationFrame.size.width + applicationFrame.origin.x, applicationFrame.size.height + applicationFrame.origin.y);
-    if (CGSizeEqualToSize(applicationSize, CGSizeZero)) {
-        // 实测 MacCatalystApp 通过 [UIScreen mainScreen].applicationFrame 拿不到大小，这里做一下保护
-        UIWindow *window = UIApplication.sharedApplication.delegate.window;
-        if (window) {
-            applicationSize = window.bounds.size;
-        } else {
-            applicationSize = UIWindow.new.bounds.size;
-        }
-    }
-    return applicationSize;
+    UIWindow *window = self.mainWindow;
+    return window ? window.bounds.size : self.screen.bounds.size;
 }
 
 + (CGFloat)statusBarHeightConstant {
     NSString *deviceModel = [QMUIHelper deviceModel];
     
-    if (!UIApplication.sharedApplication.statusBarHidden) {
-        return UIApplication.sharedApplication.statusBarFrame.size.height;
+    if (self.statusBarHeight > 0) {
+        return self.statusBarHeight;
     }
+    // 状态栏隐藏时仍优先采用场景提供的尺寸，减少新机型对静态常量的依赖。
+    CGFloat sceneStatusBarHeight = CGRectGetHeight(self.mainWindow.windowScene.statusBarManager.statusBarFrame);
+    if (sceneStatusBarHeight > 0) return sceneStatusBarHeight;
     
     if (IS_IPAD) {
         return IS_NOTCHED_SCREEN ? 24 : 20;
@@ -1086,16 +1146,10 @@ static NSInteger isHighPerformanceDevice = -1;
         return 0;
     }
     if ([deviceModel isEqualToString:@"iPhone12,1"]) {
-        // iPhone 13 Mini
+        // iPhone 11
         return 48;
     }
-    if ([@[
-        @"iPhone 14 Pro",
-        @"iPhone 15",
-        @"iPhone 16",
-    ] qmui_firstMatchWithBlock:^BOOL(NSString *item) {
-        return [QMUIHelper.deviceName hasPrefix:item];
-    }]) {
+    if (self.isDynamicIslandDevice) {
         return 54;
     }
     if (IS_61INCH_SCREEN_AND_IPHONE12 || IS_67INCH_SCREEN) {
@@ -1118,17 +1172,47 @@ static NSInteger isHighPerformanceDevice = -1;
             return [QMUIHelper.deviceName hasPrefix:item];
         }]) {
             result += 2 + PixelOne;// 56.333
-        } else if ([@[
-            @"iPhone 14 Pro",
-            @"iPhone 15",
-            @"iPhone 16",
-        ] qmui_firstMatchWithBlock:^BOOL(NSString *item) {
-            return [QMUIHelper.deviceName hasPrefix:item];
-        }]) {
+        } else if (self.isDynamicIslandDevice) {
             result -= PixelOne;// 53.667
         }
     }
     return result;
+}
+
++ (CGFloat)navigationBarHeightForViewController:(UIViewController *)viewController {
+    UINavigationController *navigationController = nil;
+    if ([viewController isKindOfClass:UINavigationController.class]) {
+        navigationController = (UINavigationController *)viewController;
+    } else {
+        navigationController = viewController.navigationController;
+    }
+    UINavigationBar *navigationBar = navigationController.navigationBar;
+    if (navigationBar.hidden) {
+        return 0;
+    }
+    CGFloat height = CGRectGetHeight(navigationBar.bounds);
+    if (navigationBar && height > 0) {
+        return height;
+    }
+    return MAX(0, self.navigationBarMaxYConstant - self.statusBarHeightConstant);
+}
+
++ (CGFloat)tabBarHeightForViewController:(UIViewController *)viewController {
+    UITabBarController *tabBarController = nil;
+    if ([viewController isKindOfClass:UITabBarController.class]) {
+        tabBarController = (UITabBarController *)viewController;
+    } else {
+        tabBarController = viewController.tabBarController;
+    }
+    UITabBar *tabBar = tabBarController.tabBar;
+    if (tabBar.hidden) {
+        return 0;
+    }
+    CGFloat height = CGRectGetHeight(tabBar.bounds);
+    if (tabBar && height > 0) {
+        return height;
+    }
+    return IS_IPAD ? (IS_NOTCHED_SCREEN ? 65 : 50) : (IS_LANDSCAPE ? PreferredValueForVisualDevice(49, 32) : 49) + self.safeAreaInsetsForDeviceWithNotch.bottom;
 }
 
 @end
@@ -1136,13 +1220,13 @@ static NSInteger isHighPerformanceDevice = -1;
 @implementation QMUIHelper (UIApplication)
 
 + (void)dimmedApplicationWindow {
-    UIWindow *window = UIApplication.sharedApplication.delegate.window;
+    UIWindow *window = QMUIHelper.keyWindow;
     window.tintAdjustmentMode = UIViewTintAdjustmentModeDimmed;
     [window tintColorDidChange];
 }
 
 + (void)resetDimmedApplicationWindow {
-    UIWindow *window = UIApplication.sharedApplication.delegate.window;
+    UIWindow *window = QMUIHelper.keyWindow;
     window.tintAdjustmentMode = UIViewTintAdjustmentModeAutomatic;
     [window tintColorDidChange];
 }
@@ -1226,6 +1310,106 @@ static NSInteger isHighPerformanceDevice = -1;
 @end
 
 @implementation QMUIHelper
+
++ (NSArray<UIWindow *> *)applicationWindows {
+    NSMutableOrderedSet<UIWindow *> *windows = NSMutableOrderedSet.new;
+    UIApplication *application = UIApplication.sharedApplication;
+    id<UIApplicationDelegate> delegate = application.delegate;
+    UIWindow *delegateWindow = [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
+    if (delegateWindow) [windows addObject:delegateWindow];
+    for (UIScene *scene in application.connectedScenes) {
+        if ([scene isKindOfClass:UIWindowScene.class]) {
+            [windows addObjectsFromArray:((UIWindowScene *)scene).windows];
+        }
+    }
+    return windows.array;
+}
+
++ (UIWindow *)windowForView:(UIView *)view {
+    if ([view isKindOfClass:UIWindow.class]) {
+        return (UIWindow *)view;
+    }
+    if (view.window) {
+        return view.window;
+    }
+    // 尚未加入窗口层级的视图没有 window 属性，沿 responder 链查找宿主窗口可以覆盖大部分转场早期场景。
+    for (UIResponder *responder = view.nextResponder; responder; responder = responder.nextResponder) {
+        if ([responder isKindOfClass:UIWindow.class]) {
+            return (UIWindow *)responder;
+        }
+    }
+    return self.keyWindow;
+}
+
++ (UIEdgeInsets)safeAreaInsetsForView:(UIView *)view {
+    UIWindow *window = [self windowForView:view];
+    if (view.window && view.window == window) {
+        return view.safeAreaInsets;
+    }
+    if (window) {
+        return window.safeAreaInsets;
+    }
+    return self.safeAreaInsetsForDeviceWithNotch;
+}
+
++ (UIWindow *)keyWindow {
+    NSArray<UIWindow *> *windows = self.applicationWindows;
+    for (UIWindow *window in windows) {
+        if (window.isKeyWindow && (!window.windowScene || window.windowScene.activationState == UISceneActivationStateForegroundActive)) return window;
+    }
+    for (UIWindow *window in windows) {
+        if (!window.hidden && window.rootViewController && window.windowLevel == UIWindowLevelNormal
+            && (!window.windowScene || window.windowScene.activationState == UISceneActivationStateForegroundActive)) return window;
+    }
+    // 启动早期 Scene 尚未激活，优先使用即将进入前台的宿主窗口。
+    for (UIWindow *window in windows) {
+        if (window.rootViewController && (!window.windowScene || window.windowScene.activationState == UISceneActivationStateForegroundInactive)) return window;
+    }
+    return nil;
+}
+
++ (UIWindow *)mainWindow {
+    UIWindowScene *scene = self.keyWindow.windowScene;
+    for (UIWindow *window in self.applicationWindows) {
+        if (window.windowLevel == UIWindowLevelNormal && window.rootViewController
+            && (!scene || window.windowScene == scene) && !window.hidden) return window;
+    }
+    return self.keyWindow;
+}
+
++ (UIInterfaceOrientation)interfaceOrientation {
+    UIInterfaceOrientation orientation = self.keyWindow.windowScene.interfaceOrientation;
+    return orientation == UIInterfaceOrientationUnknown ? UIInterfaceOrientationPortrait : orientation;
+}
+
++ (UIInterfaceOrientation)interfaceOrientationForView:(UIView *)view {
+    UIInterfaceOrientation orientation = [self windowForView:view].windowScene.interfaceOrientation;
+    return orientation == UIInterfaceOrientationUnknown ? self.interfaceOrientation : orientation;
+}
+
++ (CGFloat)statusBarHeight {
+    UIStatusBarManager *manager = self.keyWindow.windowScene.statusBarManager;
+    return manager.isStatusBarHidden ? 0 : CGRectGetHeight(manager.statusBarFrame);
+}
+
++ (UIScreen *)screen {
+    // flat 等高频工具会访问屏幕，直接查询场景，避免反复创建窗口集合。
+    UIApplication *application = UIApplication.sharedApplication;
+    id<UIApplicationDelegate> delegate = application.delegate;
+    UIWindow *window = [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
+    if (window && (!window.windowScene || window.windowScene.activationState == UISceneActivationStateForegroundActive)) return window.screen;
+    UIScreen *connectedScreen = nil;
+    for (UIScene *scene in application.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        if (scene.activationState == UISceneActivationStateForegroundActive) return ((UIWindowScene *)scene).screen;
+        connectedScreen = connectedScreen ?: ((UIWindowScene *)scene).screen;
+    }
+    if (connectedScreen) return connectedScreen;
+    // Scene 连接前 UIKit 没有公开的上下文屏幕；保留唯一旧接口兜底，避免创建窗口造成布局递归。
+    BeginIgnoreDeprecatedWarning
+    return UIScreen.mainScreen;
+    EndIgnoreDeprecatedWarning
+}
 
 + (void)load {
     static dispatch_once_t onceToken;

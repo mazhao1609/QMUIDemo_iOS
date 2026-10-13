@@ -164,7 +164,8 @@
             .colorSpace = NULL,
             // (kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little)
             // requests a BGRA buffer.
-            .bitmapInfo = kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little,
+            // 将 alpha 类型转换为位图标志，保持原有 BGRA 格式。
+            .bitmapInfo = (CGBitmapInfo)kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little,
             .version = 0,
             .decode = NULL,
             .renderingIntent = kCGRenderingIntentDefault

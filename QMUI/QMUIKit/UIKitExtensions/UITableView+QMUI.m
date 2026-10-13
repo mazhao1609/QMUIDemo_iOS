@@ -500,6 +500,31 @@ const NSUInteger kFloatValuePrecision = 4;// 统一一个小数点运算精度
 
 @implementation UITableView (QMUI_InsetGrouped)
 
+static void QMUIApplyInsetGroupedCellStyle(UITableView *tableView, UITableViewCell *cell) {
+#ifdef IOS26_SDK_ALLOWED
+    if (@available(iOS 26.0, *)) {
+        if (!tableView || tableView.style != UITableViewStyleInsetGrouped || !cell) return;
+        // iOS 26 使用 UIView.cornerConfiguration 绘制实际圆角，只改 layer.cornerRadius
+        // 会出现属性值正确、屏幕仍是大圆角的情况。沿用 layer 上的半径和角标，保留
+        // willDisplayCell 中为某一行单独设置圆角的能力，也保留首行/末行的圆角方向。
+        CGFloat radius = MAX(0, cell.layer.cornerRadius);
+        CACornerMask corners = cell.layer.maskedCorners;
+        static char configurationKey;
+        NSArray *last = objc_getAssociatedObject(cell, &configurationKey);
+        if (last && [cell.cornerConfiguration isEqual:last[0]] && [last[1] doubleValue] == radius && [last[2] unsignedIntegerValue] == corners) return;
+        UICornerRadius *rounded = [UICornerRadius fixedRadius:radius];
+        UICornerRadius *square = [UICornerRadius fixedRadius:0];
+        UICornerConfiguration *configuration = [UICornerConfiguration
+            configurationWithTopLeftRadius:(corners & kCALayerMinXMinYCorner) ? rounded : square
+            topRightRadius:(corners & kCALayerMaxXMinYCorner) ? rounded : square
+            bottomLeftRadius:(corners & kCALayerMinXMaxYCorner) ? rounded : square
+            bottomRightRadius:(corners & kCALayerMaxXMaxYCorner) ? rounded : square];
+        cell.cornerConfiguration = configuration;
+        objc_setAssociatedObject(cell, &configurationKey, @[cell.cornerConfiguration, @(radius), @(corners)], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+#endif
+}
+
 + (void)load {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -523,6 +548,7 @@ const NSUInteger kFloatValuePrecision = 4;// 统一一个小数点运算精度
                         cornerRadius = 0;
                     }
                     cell.layer.cornerRadius = cornerRadius;
+                    QMUIApplyInsetGroupedCellStyle(selfObject, cell);
                 }
                 
                 if (cell.qmui_configureStyleBlock) {
@@ -548,6 +574,7 @@ const NSUInteger kFloatValuePrecision = 4;// 统一一个小数点运算精度
                         cornerRadius = 0;
                     }
                     selfObject.layer.cornerRadius = cornerRadius;
+                    QMUIApplyInsetGroupedCellStyle(tableView, selfObject);
                 }
             };
         });
@@ -569,6 +596,35 @@ const NSUInteger kFloatValuePrecision = 4;// 统一一个小数点运算精度
                 return result;
             };
         });
+
+        // iOS 26 的 InsetGrouped 部分路径改用 directionalLayoutMargins，和 layoutMargins
+        // 同步返回，避免横向缩进被系统的默认 20pt 覆盖。
+        OverrideImplementation([UITableView class], @selector(directionalLayoutMargins), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+            return ^NSDirectionalEdgeInsets(UITableView *selfObject) {
+                NSDirectionalEdgeInsets result = ((NSDirectionalEdgeInsets (*)(id, SEL))originalIMPProvider())(selfObject, originCMD);
+                if (@available(iOS 26.0, *)) {
+                    if (selfObject.style != UITableViewStyleInsetGrouped) return result;
+                    BOOL leftToRight = [UIView userInterfaceLayoutDirectionForSemanticContentAttribute:selfObject.semanticContentAttribute] == UIUserInterfaceLayoutDirectionLeftToRight;
+                    CGFloat leadingInset = leftToRight ? selfObject.safeAreaInsets.left : selfObject.safeAreaInsets.right;
+                    CGFloat trailingInset = leftToRight ? selfObject.safeAreaInsets.right : selfObject.safeAreaInsets.left;
+                    result.leading = leadingInset + selfObject.qmui_insetGroupedHorizontalInset;
+                    result.trailing = trailingInset + selfObject.qmui_insetGroupedHorizontalInset;
+                }
+                return result;
+            };
+        });
+
+        // 布局完成后将旧版圆角设置同步到 iOS 26 的公开圆角配置。
+        OverrideImplementation([UITableViewCell class], @selector(layoutSubviews), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+            return ^(UITableViewCell *selfObject) {
+                ((void (*)(id, SEL))originalIMPProvider())(selfObject, originCMD);
+                if (@available(iOS 26.0, *)) {
+                    QMUIApplyInsetGroupedCellStyle(selfObject.qmui_tableView, selfObject);
+                }
+            };
+        });
+
+
     });
 }
 
@@ -577,6 +633,7 @@ static char kAssociatedObjectKey_insetGroupedCornerRadius;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_insetGroupedCornerRadius, @(qmui_insetGroupedCornerRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (self.style == UITableViewStyleInsetGrouped && self.indexPathsForVisibleRows.count) {
         [self reloadData];
+        [self setNeedsLayout];
     }
 }
 
@@ -595,6 +652,7 @@ static char kAssociatedObjectKey_insetGroupedHorizontalInset;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_insetGroupedHorizontalInset, @(qmui_insetGroupedHorizontalInset), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (self.style == UITableViewStyleInsetGrouped && self.indexPathsForVisibleRows.count) {
         [self reloadData];
+        [self setNeedsLayout];
     }
 }
 

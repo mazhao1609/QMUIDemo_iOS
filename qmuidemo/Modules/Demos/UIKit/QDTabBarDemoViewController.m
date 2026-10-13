@@ -45,7 +45,9 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGFloat tabBarHeight = TabBarHeight;
+    // 使用 TabBar 的实际内容高度叠加当前 Scene 安全区，覆盖分屏和折叠尺寸变化。
+    CGFloat tabBarContentHeight = [self.tabBar sizeThatFits:CGSizeMake(CGRectGetWidth(self.view.bounds), CGFLOAT_MAX)].height;
+    CGFloat tabBarHeight = tabBarContentHeight + SafeAreaInsetsForView(self.view).bottom;
     self.tabBar.frame = CGRectMake(0, CGRectGetHeight(self.view.bounds) - tabBarHeight, CGRectGetWidth(self.view.bounds), tabBarHeight);
     if (self.blurTestView) {
         CGRect rect = [self.tableView convertRect:self.tabBar.frame fromView:self.view];

@@ -68,7 +68,9 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGFloat tabBarHeight = TabBarHeight;
+    // 自定义 TabBar 仍由 UIKit 提供基础高度，底部安全区取当前页面所属 Scene。
+    CGFloat tabBarContentHeight = [self.tabBar sizeThatFits:CGSizeMake(CGRectGetWidth(self.view.bounds), CGFLOAT_MAX)].height;
+    CGFloat tabBarHeight = tabBarContentHeight + SafeAreaInsetsForView(self.view).bottom;
     self.tabBar.frame = CGRectMake(0, CGRectGetHeight(self.view.bounds) - tabBarHeight, CGRectGetWidth(self.view.bounds), tabBarHeight);
     self.toolbar.frame = CGRectMake(0, CGRectGetMinY(self.tabBar.frame) - CGRectGetHeight(self.toolbar.frame), CGRectGetWidth(self.view.bounds), CGRectGetHeight(self.toolbar.frame));
 }

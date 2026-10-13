@@ -157,6 +157,9 @@
 
 - (instancetype)init {
     if (self = [self initWithType:QMUINavigationButtonTypeBack]) {
+        // 箭头和未读数由本按钮自行布局，避免配置容器覆盖子类的尺寸和图片位置。
+        self.configurationUpdateHandler = nil;
+        self.configuration = nil;
         
         self.countLabel = UILabel.new;
         self.countLabel.font = UIFontBoldMake(14);
@@ -166,6 +169,7 @@
         
         self.countLabelPadding = UIEdgeInsetsMake(4, 6, 4, 6);
         self.spacingBetweenImageAndTitle = 5;
+        [self tintColorDidChange];
         
         [self addTarget:self action:@selector(handlePopEvent) forControlEvents:UIControlEventTouchUpInside];
     }
@@ -182,6 +186,13 @@
 - (void)setCountString:(NSString *)countString {
     _countString = countString;
     self.countLabel.text = countString;
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsLayout];
+}
+
+- (CGSize)intrinsicContentSize {
+    // 导航栏使用 Auto Layout 测量 customView，不能只靠 sizeToFit 更新 frame。
+    return [self sizeThatFits:CGSizeMax];
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
@@ -189,18 +200,24 @@
     countLabelSize.width = countLabelSize.width + UIEdgeInsetsGetHorizontalValue(self.countLabelPadding);
     countLabelSize.height = countLabelSize.height + UIEdgeInsetsGetVerticalValue(self.countLabelPadding);
     countLabelSize.width = MAX(countLabelSize.width, countLabelSize.height);
-    CGFloat resultWidth = CGRectGetWidth(self.imageView.frame) + self.spacingBetweenImageAndTitle + countLabelSize.width;
-    CGFloat resultHeight = MAX(CGRectGetHeight(self.imageView.frame), countLabelSize.height);
+    // 使用图片原始尺寸，避免读取上一轮布局后的 frame 造成尺寸回缩或累积。
+    CGSize imageSize = self.currentImage.size;
+    CGFloat resultWidth = imageSize.width + self.spacingBetweenImageAndTitle + countLabelSize.width;
+    CGFloat resultHeight = MAX(imageSize.height, countLabelSize.height);
     
     return CGSizeMake(resultWidth, resultHeight);
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.imageView.qmui_left = 0;
-    self.imageView.qmui_top = CGFloatGetCenter(self.qmui_height, self.imageView.qmui_height);
-    CGSize countLabelSize = CGSizeMake(CGRectGetWidth(self.bounds) - self.imageView.qmui_right - self.spacingBetweenImageAndTitle, [self.countLabel sizeThatFits:CGSizeMax].height + UIEdgeInsetsGetVerticalValue(self.countLabelPadding));
-    self.countLabel.frame = CGRectMake(CGRectGetMaxX(self.imageView.frame) + self.spacingBetweenImageAndTitle, CGFloatGetCenter(self.qmui_height, countLabelSize.height), countLabelSize.width, countLabelSize.height);
+    CGSize imageSize = self.currentImage.size;
+    CGRect imageFrame = CGRectMake(0, CGFloatGetCenter(self.qmui_height, imageSize.height), imageSize.width, imageSize.height);
+    self.imageView.frame = [self convertRect:imageFrame toView:self.imageView.superview];
+    CGSize countLabelSize = [self.countLabel sizeThatFits:CGSizeMax];
+    countLabelSize.width += UIEdgeInsetsGetHorizontalValue(self.countLabelPadding);
+    countLabelSize.height += UIEdgeInsetsGetVerticalValue(self.countLabelPadding);
+    countLabelSize.width = MAX(countLabelSize.width, countLabelSize.height);
+    self.countLabel.frame = CGRectMake(CGRectGetMaxX(imageFrame) + self.spacingBetweenImageAndTitle, CGFloatGetCenter(self.qmui_height, countLabelSize.height), countLabelSize.width, countLabelSize.height);
     self.countLabel.layer.cornerRadius = countLabelSize.height / 2;
 }
 

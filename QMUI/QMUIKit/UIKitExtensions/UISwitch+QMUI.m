@@ -55,7 +55,40 @@ static char kAssociatedObjectKey_offTintColor;
 static NSString * const kDefaultOffTintColorKey = @"defaultOffTintColorKey";
 
 - (void)setQmui_offTintColor:(UIColor *)qmui_offTintColor {
-    UIView *switchWellView = [self valueForKeyPath:@"_visualElement._switchWellView"];
+    // 尽力寻找实际轨道容器，系统改变结构时只存储颜色，不触发私有 KVC 异常。
+    UIView *switchWellView = nil;
+    NSMutableArray<UIView *> *views = self.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < views.count; index++) {
+        UIView *view = views[index];
+        if ([NSStringFromClass(view.class) containsString:@"SwitchWell"]) {
+            switchWellView = view;
+            break;
+        }
+        [views addObjectsFromArray:view.subviews];
+    }
+    if (!switchWellView) {
+        // 兼容旧系统使用通用 UIView 作为轨道的情况，仅调用仍存在的对象 getter。
+        NSObject *visualElement = self;
+        for (NSString *name in @[@"visualElement", @"_visualElement"]) {
+            SEL selector = NSSelectorFromString(name);
+            if ([self respondsToSelector:selector] && [self methodSignatureForSelector:selector].methodReturnType[0] == '@') {
+                BeginIgnorePerformSelectorLeaksWarning
+                visualElement = [self performSelector:selector];
+                EndIgnorePerformSelectorLeaksWarning
+                break;
+            }
+        }
+        for (NSString *name in @[@"switchWellView", @"_switchWellView"]) {
+            SEL selector = NSSelectorFromString(name);
+            if ([visualElement respondsToSelector:selector] && [visualElement methodSignatureForSelector:selector].methodReturnType[0] == '@') {
+                BeginIgnorePerformSelectorLeaksWarning
+                id view = [visualElement performSelector:selector];
+                EndIgnorePerformSelectorLeaksWarning
+                if ([view isKindOfClass:UIView.class]) switchWellView = view;
+                break;
+            }
+        }
+    }
     UIColor *defaultOffTintColor = [switchWellView qmui_getBoundObjectForKey:kDefaultOffTintColorKey];
     if (!defaultOffTintColor) {
         defaultOffTintColor = switchWellView.backgroundColor;

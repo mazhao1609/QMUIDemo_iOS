@@ -11,7 +11,7 @@
 
 @interface QDObjectViewController ()
 
-@property(nonatomic, strong) NSMutableArray<NSString *> *allClasses;
+@property(nonatomic, copy) NSArray<NSString *> *allClasses;
 @property(nonatomic, strong) NSMutableArray<NSString *> *autocompletionClasses;
 @end
 
@@ -24,7 +24,14 @@
         self.autocompletionClasses = [[NSMutableArray alloc] init];
         
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            self.allClasses = [self allClassesArray];
+            NSArray<NSString *> *allClasses = [self allClassesArray];
+            // 类列表在后台读取，搜索数据统一在主线程发布和刷新。
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.allClasses = allClasses;
+                if (self.isViewLoaded && self.searchBar.text.length > 2) {
+                    [self searchController:self.searchController updateResultsForSearchString:self.searchBar.text];
+                }
+            });
         });
     }
     return self;
@@ -46,20 +53,21 @@
     self.emptyView.textLabel.qmui_textAttributes = @{NSParagraphStyleAttributeName: [NSMutableParagraphStyle qmui_paragraphStyleWithLineHeight:24]};
 }
 
-- (NSMutableArray<NSString *> *)allClassesArray {
+- (NSArray<NSString *> *)allClassesArray {
     NSMutableArray<NSString *> *allClasses = [[NSMutableArray alloc] init];
-    Class *classes = nil;
-    int numberOfClasses = objc_getClassList(nil, 0);
-    if (numberOfClasses > 0) {
-        classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * numberOfClasses);
-        numberOfClasses = objc_getClassList(classes, numberOfClasses);
-        for (int i = 0; i < numberOfClasses; i++) {
-            Class c = classes[i];
-            [allClasses addObject:NSStringFromClass(c)];
+    unsigned int numberOfClasses = 0;
+    // 一次获取完整快照，避免两次 objc_getClassList 之间新增类导致缓冲区越界。
+    Class __unsafe_unretained *classes = objc_copyClassList(&numberOfClasses);
+    if (classes) {
+        for (unsigned int i = 0; i < numberOfClasses; i++) {
+            NSString *className = classes[i] ? NSStringFromClass(classes[i]) : nil;
+            if (className.length) {
+                [allClasses addObject:className];
+            }
         }
         free(classes);
     }
-    return allClasses;
+    return allClasses.copy;
 }
 
 - (double)matchingWeightForResult:(NSString *)className withSearchString:(NSString *)searchString {

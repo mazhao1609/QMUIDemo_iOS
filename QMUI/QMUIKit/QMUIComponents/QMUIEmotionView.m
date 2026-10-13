@@ -401,7 +401,7 @@
     
     _sendButton = [[QMUIButton alloc] init];
     [self.sendButton setTitle:@"发送" forState:UIControlStateNormal];
-    self.sendButton.contentEdgeInsets = UIEdgeInsetsMake(5, 17, 5, 17);
+    self.sendButton.qmui_contentInsets = UIEdgeInsetsMake(5, 17, 5, 17);
     [self addSubview:self.sendButton];
 
     _deleteButton = [[QMUIButton alloc] init];

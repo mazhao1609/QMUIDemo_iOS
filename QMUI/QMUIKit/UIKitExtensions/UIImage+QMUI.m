@@ -131,7 +131,8 @@ static NSString * const kQMUIImageNameKey = @"kQMUIImageNameKey";
 - (UIColor *)qmui_averageColor {
 	unsigned char rgba[4] = {};
 	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-	CGContextRef context = CGBitmapContextCreate(rgba, 1, 1, 8, 4, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+	// alpha 信息需先转换为位图标志，保持原有 RGBA 格式。
+	CGContextRef context = CGBitmapContextCreate(rgba, 1, 1, 8, 4, colorSpace, (CGBitmapInfo)kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
 	CGContextInspectContext(context, nil);
 	CGContextDrawImage(context, CGRectMake(0, 0, 1, 1), self.CGImage);
 	CGColorSpaceRelease(colorSpace);
@@ -167,7 +168,7 @@ static NSString * const kQMUIImageNameKey = @"kQMUIImageNameKey";
     if (self.qmui_opaque) {
         grayImage = [UIImage imageWithCGImage:imageRef scale:self.scale orientation:self.imageOrientation];
     } else {
-        CGContextRef alphaContext = CGBitmapContextCreate(NULL, size.width, size.height, 8, 0, nil, kCGImageAlphaOnly);
+        CGContextRef alphaContext = CGBitmapContextCreate(NULL, size.width, size.height, 8, 0, nil, (CGBitmapInfo)kCGImageAlphaOnly);
         CGContextDrawImage(alphaContext, imageRect, self.CGImage);
         CGImageRef mask = CGBitmapContextCreateImage(alphaContext);
 		CGImageRef maskedGrayImageRef = CGImageCreateWithMask(imageRef, mask);

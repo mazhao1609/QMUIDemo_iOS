@@ -310,6 +310,7 @@
 		CDFE9575293FB1DE007AE1AA /* QMUIKit.podspec in Resources */ = {isa = PBXBuildFile; fileRef = CDFE9574293FB1DE007AE1AA /* QMUIKit.podspec */; };
 		CDFF5FB62369926300B63B92 /* Photos.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDFF5FB52369926300B63B92 /* Photos.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		D00881762677B5870061CABF /* UIButtonTests.m in Sources */ = {isa = PBXBuildFile; fileRef = D00881752677B5870061CABF /* UIButtonTests.m */; };
+		E1D555680006471EBDEAB381 /* UISliderTests.m in Sources */ = {isa = PBXBuildFile; fileRef = E1D555680006471EBDEAB380 /* UISliderTests.m */; };
 		D00B6521242A67D7002C27AB /* QMUIAppearance.h in Headers */ = {isa = PBXBuildFile; fileRef = D00B651F242A67D7002C27AB /* QMUIAppearance.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		D00B6522242A67D7002C27AB /* QMUIAppearance.m in Sources */ = {isa = PBXBuildFile; fileRef = D00B6520242A67D7002C27AB /* QMUIAppearance.m */; };
 		D0193BE822E3449D00FB76F5 /* UIVisualEffect+QMUITheme.h in Headers */ = {isa = PBXBuildFile; fileRef = D0193BE622E3449D00FB76F5 /* UIVisualEffect+QMUITheme.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -355,6 +356,7 @@
 		FECD352722BBC3BB00DC69DE /* QMUIDisplayLinkAnimation.m in Sources */ = {isa = PBXBuildFile; fileRef = FECD352122BBC3BB00DC69DE /* QMUIDisplayLinkAnimation.m */; };
 		FECD352B22BBC93500DC69DE /* QMUIWindowSizeMonitor.m in Sources */ = {isa = PBXBuildFile; fileRef = FECD352922BBC93400DC69DE /* QMUIWindowSizeMonitor.m */; };
 		FECD352C22BBC93500DC69DE /* QMUIWindowSizeMonitor.h in Headers */ = {isa = PBXBuildFile; fileRef = FECD352A22BBC93500DC69DE /* QMUIWindowSizeMonitor.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		1AF872138D3B40FCAA914F79 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6578742232E94835A438EF39 /* UniformTypeIdentifiers.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -680,6 +682,7 @@
 		CDFE9574293FB1DE007AE1AA /* QMUIKit.podspec */ = {isa = PBXFileReference; lastKnownFileType = text; path = QMUIKit.podspec; sourceTree = SOURCE_ROOT; };
 		CDFF5FB52369926300B63B92 /* Photos.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Photos.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Photos.framework; sourceTree = DEVELOPER_DIR; };
 		D00881752677B5870061CABF /* UIButtonTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UIButtonTests.m; sourceTree = "<group>"; };
+		E1D555680006471EBDEAB380 /* UISliderTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UISliderTests.m; sourceTree = "<group>"; };
 		D00B651F242A67D7002C27AB /* QMUIAppearance.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QMUIAppearance.h; sourceTree = "<group>"; };
 		D00B6520242A67D7002C27AB /* QMUIAppearance.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = QMUIAppearance.m; sourceTree = "<group>"; };
 		D0193BE622E3449D00FB76F5 /* UIVisualEffect+QMUITheme.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "UIVisualEffect+QMUITheme.h"; sourceTree = "<group>"; };
@@ -726,6 +729,7 @@
 		FECD352122BBC3BB00DC69DE /* QMUIDisplayLinkAnimation.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = QMUIDisplayLinkAnimation.m; sourceTree = "<group>"; };
 		FECD352922BBC93400DC69DE /* QMUIWindowSizeMonitor.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = QMUIWindowSizeMonitor.m; sourceTree = "<group>"; };
 		FECD352A22BBC93500DC69DE /* QMUIWindowSizeMonitor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = QMUIWindowSizeMonitor.h; sourceTree = "<group>"; };
+		6578742232E94835A438EF39 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -741,6 +745,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1AF872138D3B40FCAA914F79 /* UniformTypeIdentifiers.framework in Frameworks */,
 				CDFF5FB62369926300B63B92 /* Photos.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -811,6 +816,7 @@
 		CD44C1C71956D5970098D0A2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				6578742232E94835A438EF39 /* UniformTypeIdentifiers.framework */,
 				6D03A56D1B53895D003BDDE4 /* Photos.framework */,
 				CDFF5FB52369926300B63B92 /* Photos.framework */,
 				CD44C1C81956D5970098D0A2 /* Foundation.framework */,
@@ -848,6 +854,7 @@
 				D0ECA053261513230067BCC6 /* NSStringTests.m */,
 				CD4EA57D228C443B00A55066 /* UIColorTests.m */,
 				D00881752677B5870061CABF /* UIButtonTests.m */,
+				E1D555680006471EBDEAB380 /* UISliderTests.m */,
 			);
 			path = UIKitExtensions;
 			sourceTree = "<group>";
@@ -1687,6 +1694,7 @@
 			files = (
 				D0ECA054261513230067BCC6 /* NSStringTests.m in Sources */,
 				D00881762677B5870061CABF /* UIButtonTests.m in Sources */,
+				E1D555680006471EBDEAB381 /* UISliderTests.m in Sources */,
 				CD4EA57E228C443B00A55066 /* UIColorTests.m in Sources */,
 				D0F0C7C2246A926600927A1A /* QMUICommonDefinesTests.m in Sources */,
 				CDC006E522A804D800A81771 /* NSObjectTests.m in Sources */,
@@ -1923,7 +1931,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 			};
@@ -1971,7 +1979,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				SDKROOT = iphoneos;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -1995,7 +2003,7 @@
 					"$(inherited)",
 				);
 				INFOPLIST_FILE = QMUIKitTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2024,7 +2032,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = QMUIKitTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2062,7 +2070,7 @@
 				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				INFOPLIST_FILE = QMUIKit/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2106,7 +2114,7 @@
 				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				INFOPLIST_FILE = QMUIKit/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -91,7 +91,8 @@
         self.qd_navigationBarBackgroundImage = [UIImage qmui_imageWithName:@"qd_navigationBarBackgroundImage" themeProvider:^UIImage * _Nonnull(__kindof QMUIThemeManager * _Nonnull manager, __kindof NSObject<NSCopying> * _Nullable identifier, NSObject<QDThemeProtocol> * _Nullable theme) {
             return [UIImage qmui_imageWithColor:theme.themeTintColor];
         }];
-        self.qd_navigationBarBackIndicatorImage = [UIImage qmui_imageWithShape:QMUIImageShapeNavBack size:CGSizeMake(12, 20) tintColor:UIColor.whiteColor];
+        // 普通返回箭头在低版本与 iOS 26 使用相同的 13×21pt 线稿。
+        self.qd_navigationBarBackIndicatorImage = [UIImage qmui_imageWithShape:QMUIImageShapeNavBack size:CGSizeMake(13, 21) lineWidth:2.5 tintColor:UIColor.whiteColor];
         self.qd_navigationBarCloseImage = [UIImage qmui_imageWithShape:QMUIImageShapeNavClose size:CGSizeMake(16, 16) tintColor:UIColor.whiteColor];
         self.qd_navigationBarDisclosureIndicatorImage = [[UIImage qmui_imageWithShape:QMUIImageShapeTriangle size:CGSizeMake(8, 5) tintColor:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
         self.qd_tableViewCellDisclosureIndicatorImage = [UIImage qmui_imageWithName:@"qd_tableViewCellDisclosureIndicatorImage" themeProvider:^UIImage * _Nonnull(__kindof QMUIThemeManager * _Nonnull manager, NSString * _Nullable identifier, NSObject<QDThemeProtocol> * _Nullable theme) {

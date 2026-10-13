@@ -21,7 +21,8 @@
 #import "UIImage+QMUI.h"
 #import <objc/message.h>
 
-@interface UIImage ()
+// 私有方法属于分类，避免将其声明为 UIImage 主类的方法。
+@interface UIImage (QMUITheme_Private)
 
 @property(nonatomic, assign) BOOL qmui_shouldUseSystemIMP;
 + (nullable UIImage *)qmui_dynamicImageWithOriginalImage:(UIImage *)image tintColor:(UIColor *)tintColor originalActionBlock:(UIImage * (^)(UIImage *aImage, UIColor *aTintColor))originalActionBlock;

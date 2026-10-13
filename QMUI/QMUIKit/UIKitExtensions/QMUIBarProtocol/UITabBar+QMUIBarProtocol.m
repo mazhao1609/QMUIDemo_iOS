@@ -28,36 +28,40 @@ QMUISynthesizeBOOLProperty(qmuibar_hasSetEffectForegroundColor, setQmuibar_hasSe
 
 BeginIgnoreClangWarning(-Wobjc-protocol-method-implementation)
 - (void)qmuibar_updateEffect {
-    [self.qmui_effectViews enumerateObjectsUsingBlock:^(UIVisualEffectView * _Nonnull effectView, NSUInteger idx, BOOL * _Nonnull stop) {
-        if (self.qmuibar_hasSetEffect) {
-            // 这里对 iOS 13 不使用 UITabBarAppearance.backgroundEffect 来修改，是因为反正不管 iOS 10 还是 13，最终都是 setBackgroundEffects: 在起作用，而且不用 UITabBarAppearance 还可以规避与 UIAppearance 机制的冲突
-            NSArray<UIVisualEffect *> *effects = self.qmuibar_backgroundEffects;
-            [effectView qmui_performSelector:NSSelectorFromString(@"setBackgroundEffects:") withArguments:&effects, nil];
-        }
-        if (self.qmuibar_hasSetEffectForegroundColor) {
-            effectView.qmui_foregroundColor = self.qmui_effectForegroundColor;
-        }
-    }];
+    // 使用公开 appearance，分别保留标准、紧凑和滚动边缘样式。
+    void (^applyEffect)(UITabBarAppearance *) = ^(UITabBarAppearance *appearance) {
+        if (self.qmuibar_hasSetEffect) appearance.backgroundEffect = self.qmui_effect;
+        if (self.qmuibar_hasSetEffectForegroundColor) appearance.backgroundColor = self.qmui_effectForegroundColor;
+    };
+    UITabBarAppearance *appearance = [self.standardAppearance copy];
+    applyEffect(appearance);
+    self.standardAppearance = appearance;
+    if (self.scrollEdgeAppearance) {
+        UITabBarAppearance *edgeAppearance = [self.scrollEdgeAppearance copy];
+        applyEffect(edgeAppearance);
+        self.scrollEdgeAppearance = edgeAppearance;
+    }
 }
 EndIgnoreClangWarning
-
-// UITabBar、UIVisualEffectView  都有一个私有的方法 backgroundEffects，当 UIVisualEffectView 应用于 UITabBar 场景时，磨砂的效果实际上被放在 backgroundEffects 内，而不是公开接口的 effect 属性里，这里为了方便，将 UITabBar (QMUI).effect 转成可用于 backgroundEffects 的数组
-- (NSArray<UIVisualEffect *> *)qmuibar_backgroundEffects {
-    if (self.qmuibar_hasSetEffect) {
-        return self.qmui_effect ? @[self.qmui_effect] : nil;
-    }
-    return nil;
-}
 
 #pragma mark - <QMUIBarProtocol>
 
 - (UIView *)qmui_backgroundView {
-    return [self qmui_valueForKey:@"_backgroundView"];
+    // 背景容器只做尽力查询，结构改变时返回 nil，避免私有 KVC 异常。
+    for (UIView *view in self.subviews) {
+        if ([NSStringFromClass(view.class) containsString:@"BarBackground"]) return view;
+    }
+    return nil;
 }
 
 - (UIImageView *)qmui_shadowImageView {
-    // bar 在 init 完就可以获取到 backgroundView 和 shadowView，无需关心调用时机的问题
-    return [self.qmui_backgroundView qmui_valueForKey:@"_shadowView1"];
+    NSMutableArray<UIView *> *views = self.qmui_backgroundView.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < views.count; index++) {
+        UIView *view = views[index];
+        if ([view isKindOfClass:UIImageView.class] && [NSStringFromClass(view.class) containsString:@"Shadow"]) return (UIImageView *)view;
+        [views addObjectsFromArray:view.subviews];
+    }
+    return nil;
 }
 
 - (UIVisualEffectView *)qmui_effectView {
@@ -68,25 +72,21 @@ EndIgnoreClangWarning
 }
 
 - (NSArray<UIVisualEffectView *> *)qmui_effectViews {
-    UIView *backgroundView = self.qmui_backgroundView;
     NSMutableArray<UIVisualEffectView *> *result = NSMutableArray.new;
-    UIVisualEffectView *backgroundEffectView1 = [backgroundView valueForKey:@"_effectView1"];
-    UIVisualEffectView *backgroundEffectView2 = [backgroundView valueForKey:@"_effectView2"];
-    if (backgroundEffectView1) {
-        [result addObject:backgroundEffectView1];
+    NSMutableArray<UIView *> *views = self.qmui_backgroundView.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < views.count; index++) {
+        UIView *view = views[index];
+        if ([view isKindOfClass:UIVisualEffectView.class]) {
+            [result addObject:(UIVisualEffectView *)view];
+        } else {
+            [views addObjectsFromArray:view.subviews];
+        }
     }
-    if (backgroundEffectView2) {
-        [result addObject:backgroundEffectView2];
-    }
-    return result.count > 0 ? result : nil;
+    return result.count ? result : nil;
 }
 
 static char kAssociatedObjectKey_effect;
 - (void)setQmui_effect:(UIBlurEffect *)qmui_effect {
-    if (qmui_effect) {
-        [QMUIBarProtocolPrivate swizzleBarBackgroundViewIfNeeded];
-    }
-    
     BOOL valueChanged = self.qmui_effect != qmui_effect;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_effect, qmui_effect, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (valueChanged) {
@@ -101,9 +101,6 @@ static char kAssociatedObjectKey_effect;
 
 static char kAssociatedObjectKey_effectForegroundColor;
 - (void)setQmui_effectForegroundColor:(UIColor *)qmui_effectForegroundColor {
-    if (qmui_effectForegroundColor) {
-        [QMUIBarProtocolPrivate swizzleBarBackgroundViewIfNeeded];
-    }
     BOOL valueChanged = ![self.qmui_effectForegroundColor isEqual:qmui_effectForegroundColor];
     objc_setAssociatedObject(self, &kAssociatedObjectKey_effectForegroundColor, qmui_effectForegroundColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (valueChanged) {

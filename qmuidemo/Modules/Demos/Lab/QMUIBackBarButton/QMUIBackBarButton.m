@@ -101,6 +101,8 @@ static char kAssociatedObjectKey_backBarButton;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_backBarButton, qmui_backBarButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     qmui_backBarButton.qmuibbb_isViewOfQMUIBackBarButton = YES;
     self.qmuibbb_backBarButtonItem = qmui_backBarButton ? [[UIBarButtonItem alloc] initWithCustomView:qmui_backBarButton] : nil;
+    // 自定义返回视图未必继承 QMUINavigationButton，显式标记可避免全局布局再补一个普通返回箭头。
+    [self.qmuibbb_backBarButtonItem qmui_bindBOOL:YES forKey:@"qmuinb_customBackButton"];
     
     [UINavigationItem qmuibbb_updateNavigationItems:self.qmui_navigationBar.items];
     
@@ -227,8 +229,9 @@ static char kAssociatedObjectKey_backBarButton;
 
 // 清理当前的 leftBarButtonItems 里的所有自定义返回按钮，避免前一个界面的自定义返回按钮指针变了却没刷新当前界面的旧返回按钮，所以每次都清理掉再重新 add
 - (NSMutableArray<UIBarButtonItem *> *)qmuibbb_leftBarButtonItemsWithoutCustom {
-    NSMutableArray<UIBarButtonItem *> *leftItems = [[[NSMutableArray alloc] initWithArray:self.leftBarButtonItems] qmui_filterWithBlock:^BOOL(UIBarButtonItem * _Nonnull it) {
-        return !it.customView.qmuibbb_isViewOfQMUIBackBarButton;
+    NSMutableArray<UIBarButtonItem *> *leftItems = [[[NSMutableArray alloc] initWithArray:self.leftBarButtonItems ?: @[]] qmui_filterWithBlock:^BOOL(UIBarButtonItem * _Nonnull it) {
+        // 全局旧版布局生成的箭头也是返回占位项，不能当作业务左按钮阻止自定义返回按钮显示。
+        return !it.customView.qmuibbb_isViewOfQMUIBackBarButton && ![it qmui_getBoundBOOLForKey:@"qmuinb_plainBackButton"];
     }].mutableCopy;
     return leftItems;
 }

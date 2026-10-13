@@ -260,24 +260,31 @@
 @implementation NSObject (QMUI_KeyValueCoding)
 
 - (id)qmui_valueForKey:(NSString *)key {
-    if ([self isKindOfClass:[UIView class]] && QMUICMIActivated && !IgnoreKVCAccessProhibited) {
-        BeginIgnoreUIKVCAccessProhibited
-        id value = [self valueForKey:key];
-        EndIgnoreUIKVCAccessProhibited
-        return value;
+    if (![self isKindOfClass:UIView.class]) return [self valueForKey:key];
+    // 显式调用安全封装时无需先启用配置表；异常或嵌套调用后恢复线程原有状态。
+    NSThread *thread = NSThread.currentThread;
+    BOOL originalValue = thread.qmui_shouldIgnoreUIKVCAccessProhibited;
+    thread.qmui_shouldIgnoreUIKVCAccessProhibited = YES;
+    @try {
+        return [self valueForKey:key];
+    } @finally {
+        thread.qmui_shouldIgnoreUIKVCAccessProhibited = originalValue;
     }
-    return [self valueForKey:key];
 }
 
 - (void)qmui_setValue:(id)value forKey:(NSString *)key {
-    if ([self isKindOfClass:[UIView class]] && QMUICMIActivated && !IgnoreKVCAccessProhibited) {
-        BeginIgnoreUIKVCAccessProhibited
+    if (![self isKindOfClass:UIView.class]) {
         [self setValue:value forKey:key];
-        EndIgnoreUIKVCAccessProhibited
         return;
     }
-    
-    [self setValue:value forKey:key];
+    NSThread *thread = NSThread.currentThread;
+    BOOL originalValue = thread.qmui_shouldIgnoreUIKVCAccessProhibited;
+    thread.qmui_shouldIgnoreUIKVCAccessProhibited = YES;
+    @try {
+        [self setValue:value forKey:key];
+    } @finally {
+        thread.qmui_shouldIgnoreUIKVCAccessProhibited = originalValue;
+    }
 }
 
 - (BOOL)qmui_canGetValueForKey:(NSString *)key {

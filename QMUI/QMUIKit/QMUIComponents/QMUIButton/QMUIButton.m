@@ -38,7 +38,7 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
         self.subtitleColor = self.tintColor;
         
         // iOS7以后的button，sizeToFit后默认会自带一个上下的contentInsets，为了保证按钮大小即为内容大小，这里直接去掉，改为一个最小的值。
-        self.contentEdgeInsets = UIEdgeInsetsMake(CGFLOAT_MIN, 0, CGFLOAT_MIN, 0);
+        self.qmui_contentInsets = UIEdgeInsetsMake(CGFLOAT_MIN, 0, CGFLOAT_MIN, 0);
         
         // 放在后面，让前面的默认值可以被子类重写的 didInitialize 覆盖
         [self didInitialize];
@@ -53,10 +53,42 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
     return self;
 }
 
+// 旧业务接口转发到 QMUI 自己保存的内边距，不再使用 UIKit 的旧属性存储。
+// 兼容转发必须保留，仅在这组方法中忽略“实现弃用方法”的诊断。
+BeginIgnoreClangWarning(-Wdeprecated-implementations)
+- (void)setContentEdgeInsets:(UIEdgeInsets)insets { self.qmui_contentInsets = insets; }
+- (UIEdgeInsets)contentEdgeInsets { return self.qmui_contentInsets; }
+- (void)setTitleEdgeInsets:(UIEdgeInsets)insets { self.qmui_titleInsets = insets; }
+- (UIEdgeInsets)titleEdgeInsets { return self.qmui_titleInsets; }
+- (void)setImageEdgeInsets:(UIEdgeInsets)insets { self.qmui_imageInsets = insets; }
+- (UIEdgeInsets)imageEdgeInsets { return self.qmui_imageInsets; }
+EndIgnoreClangWarning
+
+- (void)setQmui_contentInsets:(UIEdgeInsets)insets {
+    _qmui_contentInsets = insets;
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsLayout];
+}
+
+- (void)setQmui_titleInsets:(UIEdgeInsets)insets {
+    _qmui_titleInsets = insets;
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsLayout];
+}
+
+- (void)setQmui_imageInsets:(UIEdgeInsets)insets {
+    _qmui_imageInsets = insets;
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsLayout];
+}
+
 - (void)didInitialize {
     // 默认接管highlighted和disabled的表现，去掉系统默认的表现
+    // 手工布局按钮不启用 UIButtonConfiguration；保留旧渲染标志以避免系统重复调暗图片。
+    BeginIgnoreDeprecatedWarning
     self.adjustsImageWhenHighlighted = NO;
     self.adjustsImageWhenDisabled = NO;
+    EndIgnoreDeprecatedWarning
     self.adjustsButtonWhenHighlighted = YES;
     self.adjustsButtonWhenDisabled = YES;
     
@@ -94,9 +126,17 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
 // 系统访问 self.imageView 会触发 layout，而私有方法 _imageView 则是简单地访问 imageView，所以在 QMUIButton layoutSubviews 里应该用这个方法
 // https://github.com/Tencent/QMUI_iOS/issues/1051
 - (UIImageView *)_qmui_imageView {
-    BeginIgnorePerformSelectorLeaksWarning
-    return [self performSelector:NSSelectorFromString(@"_imageView")];
-    EndIgnorePerformSelectorLeaksWarning
+    SEL selector = NSSelectorFromString(@"_imageView");
+    if ([self respondsToSelector:selector]) {
+        BeginIgnorePerformSelectorLeaksWarning
+        return [self performSelector:selector];
+        EndIgnorePerformSelectorLeaksWarning
+    }
+    // 私有 getter 被移除时从已布局的子视图查询，避免公开 imageView getter 再次触发布局。
+    for (UIView *view in self.subviews) {
+        if ([view isKindOfClass:UIImageView.class]) return (UIImageView *)view;
+    }
+    return nil;
 }
 
 - (QMUILayouterItem *)generateLayouterForLayout:(BOOL)forLayout {
@@ -118,7 +158,7 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
     ][self.contentVerticalAlignment] integerValue];
     
     BOOL isImageViewShowing = !!self.currentImage;
-    QMUILayouterItem *image = [QMUILayouterItem itemWithView:isImageViewShowing ? (forLayout ? self._qmui_imageView : self.imageView) : nil margin:self.imageEdgeInsets];
+    QMUILayouterItem *image = [QMUILayouterItem itemWithView:isImageViewShowing ? (forLayout ? self._qmui_imageView : self.imageView) : nil margin:self.qmui_imageInsets];
     image.visibleBlock = ^BOOL(QMUILayouterItem * _Nonnull aItem) {
         return !!weakSelf.currentImage;
     };
@@ -130,7 +170,7 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
         }
         return superResult;
     };
-    QMUILayouterItem *title = [QMUILayouterItem itemWithView:self.titleLabel margin:self.titleEdgeInsets grow:QMUILayouterGrowNever shrink:QMUILayouterShrinkDefault];
+    QMUILayouterItem *title = [QMUILayouterItem itemWithView:self.titleLabel margin:self.qmui_titleInsets grow:QMUILayouterGrowNever shrink:QMUILayouterShrinkDefault];
     title.visibleBlock = ^BOOL(QMUILayouterItem * _Nonnull aItem) {
         return !!weakSelf.currentTitle || !!weakSelf.currentAttributedTitle;
     };
@@ -198,6 +238,8 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
+    // 系统配置按钮（包括玻璃按钮）由 UIKit 布局，防止 QMUI 再次移动内容。
+    if (self.configuration) return [super sizeThatFits:size];
     // 如果调用 sizeToFit，那么传进来的 size 就是当前按钮的 size，此时的计算不要去限制宽高
     // 系统 UIButton 不管任何时候，对 sizeThatFits:CGSizeZero 都会返回真实的内容大小，这里对齐
     if (CGSizeEqualToSize(self.bounds.size, size) || CGSizeIsEmpty(size)) {
@@ -206,8 +248,8 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
     
     QMUILayouterItem *layouter = [self generateLayouterForLayout:NO];
     CGSize result = [layouter sizeThatFits:size];
-    result.width += UIEdgeInsetsGetHorizontalValue(self.contentEdgeInsets);
-    result.height += UIEdgeInsetsGetVerticalValue(self.contentEdgeInsets);
+    result.width += UIEdgeInsetsGetHorizontalValue(self.qmui_contentInsets);
+    result.height += UIEdgeInsetsGetVerticalValue(self.qmui_contentInsets);
     return result;
 }
 
@@ -217,6 +259,7 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
 
 - (void)layoutSubviews {
     [super layoutSubviews];
+    if (self.configuration) return;
     
     if (CGRectIsEmpty(self.bounds)) {
         return;
@@ -227,7 +270,7 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
     }
     
     QMUILayouterItem *layouter = [self generateLayouterForLayout:YES];
-    layouter.frame = CGRectInsetEdges(self.bounds, self.contentEdgeInsets);
+    layouter.frame = CGRectInsetEdges(self.bounds, self.qmui_contentInsets);
     [layouter layoutIfNeeded];
     
     // UIButton 有一个特性是不管哪种 alignment，imageView 的宽高必定不超过 button 的宽高（也不管 imageView 的宽高比例是否产生变化），从而保证就算设置了超过 button 大小的 image，也会在 button 容器内部显示。这里对齐系统的特性
@@ -235,14 +278,14 @@ const CGFloat QMUIButtonCornerRadiusAdjustsBounds = -1;
     if (isImageViewShowing && !CGRectIsEmpty(self.bounds)) {
         UIImageView *imageView = self._qmui_imageView;
         CGRect rect = imageView.frame;
-        CGRect limitRect = CGRectInsetEdges(CGRectInsetEdges(self.bounds, self.contentEdgeInsets), self.imageEdgeInsets);
+        CGRect limitRect = CGRectInsetEdges(CGRectInsetEdges(self.bounds, self.qmui_contentInsets), self.qmui_imageInsets);
         if (CGRectGetWidth(rect) > CGRectGetWidth(limitRect)) {
             rect = CGRectSetWidth(rect, CGRectGetWidth(limitRect));
-            rect = CGRectSetX(rect, self.contentEdgeInsets.left + self.imageEdgeInsets.left);
+            rect = CGRectSetX(rect, self.qmui_contentInsets.left + self.qmui_imageInsets.left);
         }
         if (CGRectGetHeight(rect) > CGRectGetHeight(limitRect)) {
             rect = CGRectSetHeight(rect, CGRectGetHeight(limitRect));
-            rect = CGRectSetY(rect, self.contentEdgeInsets.top + self.imageEdgeInsets.top);
+            rect = CGRectSetY(rect, self.qmui_contentInsets.top + self.qmui_imageInsets.top);
         }
         imageView.frame = rect;
     }

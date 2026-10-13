@@ -143,7 +143,7 @@
 
 - (void)showSlideAnimationOnView:(UIView *)popupView withIndentifier:(NSString *)key {
     CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
-    animation.fromValue = [NSNumber numberWithFloat:- [[UIScreen mainScreen] bounds].size.height / 2 - popupView.frame.size.height / 2];
+    animation.fromValue = [NSNumber numberWithFloat:- [QMUIHelper.screen bounds].size.height / 2 - popupView.frame.size.height / 2];
     animation.toValue = [NSNumber numberWithFloat:0];
     animation.duration = 0.6;
     animation.delegate = self;
@@ -179,7 +179,7 @@
 - (void)hideSlideAnimationOnView:(UIView *)popupView withIndentifier:(NSString *)key {
     CABasicAnimation *animationY = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
     animationY.fromValue = [NSNumber numberWithFloat:0];
-    animationY.toValue = [NSNumber numberWithFloat:[[UIScreen mainScreen] bounds].size.height/2+popupView.frame.size.height/2];
+    animationY.toValue = [NSNumber numberWithFloat:[QMUIHelper.screen bounds].size.height/2+popupView.frame.size.height/2];
     animationY.duration = 0.7;
     animationY.removedOnCompletion = NO;
     animationY.fillMode = kCAFillModeBoth;

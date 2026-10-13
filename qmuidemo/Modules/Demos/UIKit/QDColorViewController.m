@@ -483,20 +483,19 @@
 
 #pragma mark - <UIColorPickerViewControllerDelegate>
 
-BeginIgnoreAvailabilityWarning
-- (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)viewController {
+// iOS 15 起使用新回调，连续拖动和最终选色均刷新相似度。
+- (void)colorPickerViewController:(UIColorPickerViewController *)viewController didSelectColor:(UIColor *)color continuously:(BOOL)continuously {
     UIView *view = nil;
     if (_circle1.selected) {
         view = _circle1;
     } else {
         view = _circle2;
     }
-    view.backgroundColor = viewController.selectedColor;
+    view.backgroundColor = color;
     CGFloat distance = [_circle1.backgroundColor qmui_distanceBetweenColor:_circle2.backgroundColor];// 关键方法
     _label.text = [NSString stringWithFormat:@"%.2f(0表示相等，值越大差距越大)", distance];
     [self setNeedsLayout];
 }
-EndIgnoreAvailabilityWarning
 
 @end
 

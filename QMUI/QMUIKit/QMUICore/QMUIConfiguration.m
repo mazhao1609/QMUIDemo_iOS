@@ -31,6 +31,10 @@ const CGSize kUINavigationBarBackIndicatorImageSize = {13, 21};
 @property(nonatomic, strong) UITabBarAppearance *tabBarAppearance API_AVAILABLE(ios(13.0));
 @end
 
+@interface UIBarButtonItem (QMUILegacyNavigationButtonConfiguration)
++ (void)qmuinb_refreshLegacyNavigationButtons;
+@end
+
 @implementation UIViewController (QMUIConfiguration)
 
 - (NSArray <UIViewController *>*)qmui_existingViewControllersOfClasses:(NSArray<Class<UIAppearanceContainer>> *)classes {
@@ -172,10 +176,15 @@ static BOOL QMUI_hasAppliedInitialTemplate;
     
     self.navBarHighlightedAlpha = 0.2f;
     self.navBarDisabledAlpha = 0.2f;
+    self.navBarButtonImageSize = CGSizeMake(24, 24);
+    self.navBarButtonImagePadding = 6;
+    self.navBarButtonContentEdgeDistance = 16;
+    self.navBarButtonItemSpacing = 8;
+    self.navBarButtonContentHorizontalPadding = 11;
     self.sizeNavBarBackIndicatorImageAutomatically = YES;
     self.navBarLoadingMarginRight = 3;
     self.navBarAccessoryViewMarginLeft = 5;
-    self.navBarActivityIndicatorViewStyle = UIActivityIndicatorViewStyleGray;
+    self.navBarActivityIndicatorViewStyle = UIActivityIndicatorViewStyleMedium;
     
     // XCTest 会在 dispatch_once 里访问 UIScreen 引发死锁，所以屏蔽掉
     // https://github.com/Tencent/QMUI_iOS/issues/1479
@@ -328,9 +337,13 @@ static BOOL QMUI_hasAppliedInitialTemplate;
 #ifdef IOS15_SDK_ALLOWED
     if (@available(iOS 15.0, *)) {
         if (QMUIHelper.canUpdateAppearance) {
-            UINavigationBar.qmui_appearanceConfigured.standardAppearance = self.navigationBarAppearance;
+            UINavigationBarAppearance *appearance = [self.navigationBarAppearance copy];
+            if (self.navBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) appearance.backgroundEffect = nil;
+            UINavigationBar.qmui_appearanceConfigured.standardAppearance = appearance;
             if (QMUICMIActivated && NavBarUsesStandardAppearanceOnly) {
-                UINavigationBar.qmui_appearanceConfigured.scrollEdgeAppearance = self.navigationBarAppearance;
+                UINavigationBar.qmui_appearanceConfigured.scrollEdgeAppearance = appearance;
+                UINavigationBar.qmui_appearanceConfigured.compactAppearance = appearance;
+                UINavigationBar.qmui_appearanceConfigured.compactScrollEdgeAppearance = appearance;
             }
         }
     }
@@ -362,6 +375,49 @@ static BOOL QMUI_hasAppliedInitialTemplate;
         }
 #endif
     } ifValueChanged:_navBarButtonFont newValue:navBarButtonFont];
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarUsesLegacyButtonLayout:(BOOL)navBarUsesLegacyButtonLayout {
+    if (_navBarUsesLegacyButtonLayout == navBarUsesLegacyButtonLayout) return;
+    _navBarUsesLegacyButtonLayout = navBarUsesLegacyButtonLayout;
+    // 同步已经创建的导航栈，后续页面无需重复设置。
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarButtonImageSize:(CGSize)navBarButtonImageSize {
+    if (!isfinite(navBarButtonImageSize.width) || !isfinite(navBarButtonImageSize.height) || navBarButtonImageSize.width <= 0 || navBarButtonImageSize.height <= 0) navBarButtonImageSize = CGSizeZero;
+    if (CGSizeEqualToSize(_navBarButtonImageSize, navBarButtonImageSize)) return;
+    _navBarButtonImageSize = navBarButtonImageSize;
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarButtonImagePadding:(CGFloat)navBarButtonImagePadding {
+    navBarButtonImagePadding = isfinite(navBarButtonImagePadding) ? MAX(0, navBarButtonImagePadding) : 0;
+    if (_navBarButtonImagePadding == navBarButtonImagePadding) return;
+    _navBarButtonImagePadding = navBarButtonImagePadding;
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarButtonContentEdgeDistance:(CGFloat)navBarButtonContentEdgeDistance {
+    navBarButtonContentEdgeDistance = isfinite(navBarButtonContentEdgeDistance) ? MAX(0, navBarButtonContentEdgeDistance) : 0;
+    if (_navBarButtonContentEdgeDistance == navBarButtonContentEdgeDistance) return;
+    _navBarButtonContentEdgeDistance = navBarButtonContentEdgeDistance;
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarButtonItemSpacing:(CGFloat)navBarButtonItemSpacing {
+    navBarButtonItemSpacing = isfinite(navBarButtonItemSpacing) ? MAX(0, navBarButtonItemSpacing) : 0;
+    if (_navBarButtonItemSpacing == navBarButtonItemSpacing) return;
+    _navBarButtonItemSpacing = navBarButtonItemSpacing;
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
+}
+
+- (void)setNavBarButtonContentHorizontalPadding:(CGFloat)navBarButtonContentHorizontalPadding {
+    navBarButtonContentHorizontalPadding = isfinite(navBarButtonContentHorizontalPadding) ? MAX(0, navBarButtonContentHorizontalPadding) : 0;
+    if (_navBarButtonContentHorizontalPadding == navBarButtonContentHorizontalPadding) return;
+    _navBarButtonContentHorizontalPadding = navBarButtonContentHorizontalPadding;
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
 }
 
 - (void)setNavBarButtonFontBold:(UIFont *)navBarButtonFontBold {
@@ -376,6 +432,7 @@ static BOOL QMUI_hasAppliedInitialTemplate;
             [self updateNavigationBarBarAppearance];
 #endif
         } ifValueChanged:_navBarButtonFontBold newValue:navBarButtonFontBold];
+        [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
     }
 }
 
@@ -688,6 +745,7 @@ static BOOL QMUI_hasAppliedInitialTemplate;
             navigationController.navigationBar.backIndicatorTransitionMaskImage = _navBarBackIndicatorImage;
         }];
     } ifValueChanged:_navBarBackIndicatorImage newValue:navBarBackIndicatorImage];
+    [UIBarButtonItem qmuinb_refreshLegacyNavigationButtons];
 }
 
 - (void)setNavBarBackButtonTitlePositionAdjustment:(UIOffset)navBarBackButtonTitlePositionAdjustment {
@@ -728,16 +786,22 @@ static BOOL QMUI_hasAppliedInitialTemplate;
 - (void)updateToolBarBarAppearance {
 #ifdef IOS15_SDK_ALLOWED
     if (@available(iOS 15.0, *)) {
+        UIToolbarAppearance *appearance = [self.toolBarAppearance copy];
+        if (self.toolBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) appearance.backgroundEffect = nil;
         if (QMUIHelper.canUpdateAppearance) {
-            UIToolbar.qmui_appearanceConfigured.standardAppearance = self.toolBarAppearance;
+            UIToolbar.qmui_appearanceConfigured.standardAppearance = appearance;
             if (QMUICMIActivated && ToolBarUsesStandardAppearanceOnly) {
-                UIToolbar.qmui_appearanceConfigured.scrollEdgeAppearance = self.toolBarAppearance;
+                UIToolbar.qmui_appearanceConfigured.scrollEdgeAppearance = appearance;
+                UIToolbar.qmui_appearanceConfigured.compactAppearance = appearance;
+                UIToolbar.qmui_appearanceConfigured.compactScrollEdgeAppearance = appearance;
             }
         }
         [self.appearanceUpdatingToolbarControllers enumerateObjectsUsingBlock:^(UINavigationController * _Nonnull navigationController, NSUInteger idx, BOOL * _Nonnull stop) {
-            navigationController.toolbar.standardAppearance = self.toolBarAppearance;
+            navigationController.toolbar.standardAppearance = appearance;
             if (QMUICMIActivated && ToolBarUsesStandardAppearanceOnly) {
-                navigationController.toolbar.scrollEdgeAppearance = self.toolBarAppearance;
+                navigationController.toolbar.scrollEdgeAppearance = appearance;
+                navigationController.toolbar.compactAppearance = appearance;
+                navigationController.toolbar.compactScrollEdgeAppearance = appearance;
             }
         }];
     }
@@ -852,22 +916,24 @@ static BOOL QMUI_hasAppliedInitialTemplate;
 }
 
 - (void)updateTabBarAppearance {
+    UITabBarAppearance *appearance = [self.tabBarAppearance copy];
+    if (self.tabBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) appearance.backgroundEffect = nil;
     if (QMUIHelper.canUpdateAppearance) {
-        UITabBar.qmui_appearanceConfigured.standardAppearance = self.tabBarAppearance;
+        UITabBar.qmui_appearanceConfigured.standardAppearance = appearance;
 #ifdef IOS15_SDK_ALLOWED
         if (@available(iOS 15.0, *)) {
             if (QMUICMIActivated && TabBarUsesStandardAppearanceOnly) {
-                UITabBar.qmui_appearanceConfigured.scrollEdgeAppearance = self.tabBarAppearance;
+                UITabBar.qmui_appearanceConfigured.scrollEdgeAppearance = appearance;
             }
         }
 #endif
     }
     [self.appearanceUpdatingTabBarControllers enumerateObjectsUsingBlock:^(UITabBarController * _Nonnull tabBarController, NSUInteger idx, BOOL * _Nonnull stop) {
-        tabBarController.tabBar.standardAppearance = self.tabBarAppearance;
+        tabBarController.tabBar.standardAppearance = appearance;
 #ifdef IOS15_SDK_ALLOWED
         if (@available(iOS 15.0, *)) {
             if (QMUICMIActivated && TabBarUsesStandardAppearanceOnly) {
-                tabBarController.tabBar.scrollEdgeAppearance = self.tabBarAppearance;
+                tabBarController.tabBar.scrollEdgeAppearance = appearance;
             }
         }
 #endif
@@ -1029,7 +1095,7 @@ static BOOL QMUI_hasAppliedInitialTemplate;
 - (NSArray <UIViewController *>*)appearanceUpdatingViewControllersOfClasses:(NSArray<Class<UIAppearanceContainer>> *)classes {
     if (!classes.count) return nil;
     NSMutableArray *viewControllers = [NSMutableArray array];
-    [UIApplication.sharedApplication.windows enumerateObjectsUsingBlock:^(__kindof UIWindow * _Nonnull window, NSUInteger idx, BOOL * _Nonnull stop) {
+    [QMUIHelper.applicationWindows enumerateObjectsUsingBlock:^(__kindof UIWindow * _Nonnull window, NSUInteger idx, BOOL * _Nonnull stop) {
         if (window.rootViewController) {
             [viewControllers addObjectsFromArray:[window.rootViewController qmui_existingViewControllersOfClasses:classes]];
         }

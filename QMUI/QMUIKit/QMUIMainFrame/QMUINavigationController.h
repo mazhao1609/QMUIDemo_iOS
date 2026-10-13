@@ -43,7 +43,7 @@
 /**
  *  当前界面正处于手势返回的过程中，可自行通过 gestureRecognizer.state 来区分手势返回的各个阶段。手势返回有多个阶段（手势返回开始、拖拽过程中、松手并成功返回、松手但不切换界面），不同阶段的 viewController 的状态可能不一样。
  *  @param navigationController 当前正在手势返回的 QMUINavigationController，由于某些阶段下无法通过 vc.navigationController 获取到 nav 的引用，所以直接传一个参数
- *  @param gestureRecognizer 手势对象
+ *  @param gestureRecognizer 边缘返回手势对象；感知 iOS 26 内容区域返回请使用带 isCancelled: 的新接口。
  *  @param viewControllerWillDisappear 手势返回中顶部的那个 vc
  *  @param viewControllerWillAppear 手势返回中背后的那个 vc
  */
@@ -55,13 +55,13 @@ poppingByInteractiveGestureRecognizer:(nullable UIScreenEdgePanGestureRecognizer
 /**
  *  当前界面正处于手势返回的过程中，可自行通过 gestureRecognizer.state 来区分手势返回的各个阶段。手势返回有多个阶段（手势返回开始、拖拽过程中、松手并成功返回、松手但不切换界面），不同阶段的 viewController 的状态可能不一样。
  *  @param navigationController 当前正在手势返回的 QMUINavigationController，请勿通过 vc.navigationController 获取 UINavigationController 的引用，而应该用本参数。因为某些手势阶段，vc.navigationController 得到的是 nil。
- *  @param gestureRecognizer 手势对象
+ *  @param gestureRecognizer 系统返回手势对象，包含边缘返回及 iOS 26 内容区域返回；使用通用 state 属性，不应假设其为 UIScreenEdgePanGestureRecognizer。
  *  @param isCancelled 表示当前手势返回是否取消，只有在松手后这个参数的值才有意义
  *  @param viewControllerWillDisappear 手势返回中顶部的那个 vc，松手时如果成功手势返回，则该参数表示被 pop 的界面，如果手势返回取消，则该参数表示背后的界面。
  *  @param viewControllerWillAppear 手势返回中背后的那个 vc，松手时如果成功手势返回，则该参数表示背后的界面，如果手势返回取消，则该参数表示当前顶部的界面。
  */
 - (void)navigationController:(nonnull QMUINavigationController *)navigationController
-poppingByInteractiveGestureRecognizer:(nullable UIScreenEdgePanGestureRecognizer *)gestureRecognizer
+poppingByInteractiveGestureRecognizer:(nullable UIGestureRecognizer *)gestureRecognizer
                  isCancelled:(BOOL)isCancelled
  viewControllerWillDisappear:(nullable UIViewController *)viewControllerWillDisappear
     viewControllerWillAppear:(nullable UIViewController *)viewControllerWillAppear;

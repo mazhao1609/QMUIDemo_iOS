@@ -82,6 +82,9 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             }
 //#endif
         
+        // 旧标题补丁只用于旧导航栏，iOS 26 及以后由系统负责玻璃布局和转场。
+        if (@available(iOS 26.0, *)) {
+        } else {
         // [UIKit Bug] iOS 12 及以上的系统，如果设置了自己的 leftBarButtonItem，且 title 很长时，则当 pop 的时候，title 会瞬间跳到左边，与 leftBarButtonItem 重叠
         // https://github.com/Tencent/QMUI_iOS/issues/1217
         // _UITAMICAdaptorView
@@ -157,6 +160,8 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             };
         });
         
+        }
+
         // 以下是将 iOS 12 修改 UINavigationBar 样式的接口转换成用 iOS 13 的新接口去设置（因为新旧方法是互斥的，所以统一在新系统都用新方法）
         // 虽然系统的新接口是 iOS 13 就已经存在，但由于 iOS 13、14 都没必要用新接口，所以 QMUI 里在 iOS 15 才开始使用新接口，所以下方的 @available 填的是 iOS 15 而非 iOS 13（与 QMUIConfiguration.m 对应）。
         // 但这样有个风险，因为 QMUIConfiguration 配置表里都是用 appearance 的方式去设置 standardAppearance，所以如果在 UINavigationBar 实例被添加到 window 之前修改过旧版任意一个样式接口，就会导致一个新的 UINavigationBarAppearance 对象被设置给 standardAppearance 属性，这样系统就会认为你这个 UINavigationBar 实例自定义了 standardAppearance，那么当它被 moveToWindow 时就不会自动应用 appearance 的值了，因此需要保证在添加到 window 前不要自行修改属性
@@ -165,14 +170,34 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             
             void (^syncAppearance)(UINavigationBar *, void(^barActionBlock)(UINavigationBarAppearance *appearance)) = ^void(UINavigationBar *navigationBar, void(^barActionBlock)(UINavigationBarAppearance *appearance)) {
                 if (!barActionBlock) return;
+                UINavigationItem *item = nil;
+                if (@available(iOS 26.0, *)) {
+                    if ([navigationBar.topItem qmui_getBoundBOOLForKey:@"qmuinb_usesNavigationItemAppearance"]) item = navigationBar.topItem;
+                    if (!QMUICMIActivated && !item) return;
+                }
                 
                 // 需要确保这里获取到的 navigationBar.standardAppearance 是已经被应用了 UIAppearance 全局样式后的值，否则会出现下方 issue 描述的问题
                 // https://github.com/Tencent/QMUI_iOS/issues/1437
-                UINavigationBarAppearance *appearance = navigationBar.standardAppearance;
+                UINavigationBarAppearance *appearance = [item.standardAppearance ?: navigationBar.standardAppearance copy];
                 barActionBlock(appearance);
+                if (QMUICMIActivated && NavBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) {
+                    appearance.backgroundEffect = nil;
+                }
+                if (item) {
+                    // 页面已有独立外观时，旧接口只更新当前页面，不能污染前一页。
+                    item.standardAppearance = appearance;
+                    if (QMUICMIActivated && NavBarUsesStandardAppearanceOnly) {
+                        item.scrollEdgeAppearance = appearance;
+                        item.compactAppearance = appearance;
+                        item.compactScrollEdgeAppearance = appearance;
+                    }
+                    return;
+                }
                 navigationBar.standardAppearance = appearance;
                 if (QMUICMIActivated && NavBarUsesStandardAppearanceOnly) {
                     navigationBar.scrollEdgeAppearance = appearance;
+                    navigationBar.compactAppearance = appearance;
+                    navigationBar.compactScrollEdgeAppearance = appearance;
                 }
             };
             
@@ -192,10 +217,26 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             
             OverrideImplementation([UINavigationBar class], @selector(barTintColor), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIColor *(UINavigationBar *selfObject) {
+                    if (@available(iOS 26.0, *)) {
+                        if (selfObject.topItem.standardAppearance && [selfObject.topItem qmui_getBoundBOOLForKey:@"qmuinb_usesNavigationItemAppearance"]) return selfObject.topItem.standardAppearance.backgroundColor;
+                        if (!QMUICMIActivated) { UIColor *(*origin)(id, SEL) = (UIColor *(*)(id, SEL))originalIMPProvider(); return origin(selfObject, originCMD); }
+                    }
                     return selfObject.standardAppearance.backgroundColor;
                 };
             });
             
+            // 两个公开重载都要同步，不能依赖新版 UIKit 将两参数调用转发给三参数方法。
+            OverrideImplementation([UINavigationBar class], @selector(setBackgroundImage:forBarMetrics:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+                return ^(UINavigationBar *selfObject, UIImage *image, UIBarMetrics barMetrics) {
+                    void (*originSelectorIMP)(id, SEL, UIImage *, UIBarMetrics) = (void (*)(id, SEL, UIImage *, UIBarMetrics))originalIMPProvider();
+                    originSelectorIMP(selfObject, originCMD, image, barMetrics);
+
+                    syncAppearance(selfObject, ^void(UINavigationBarAppearance *appearance) {
+                        appearance.backgroundImage = image;
+                    });
+                };
+            });
+
             OverrideImplementation([UINavigationBar class], @selector(setBackgroundImage:forBarPosition:barMetrics:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^(UINavigationBar *selfObject, UIImage *image, UIBarPosition barPosition, UIBarMetrics barMetrics) {
                     
@@ -212,6 +253,10 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             
             OverrideImplementation([UINavigationBar class], @selector(backgroundImageForBarPosition:barMetrics:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIImage *(UINavigationBar *selfObject, UIBarPosition firstArgv, UIBarMetrics secondArgv) {
+                    if (@available(iOS 26.0, *)) {
+                        if (selfObject.topItem.standardAppearance && [selfObject.topItem qmui_getBoundBOOLForKey:@"qmuinb_usesNavigationItemAppearance"]) return selfObject.topItem.standardAppearance.backgroundImage;
+                        if (!QMUICMIActivated) { UIImage *(*origin)(id, SEL, UIBarPosition, UIBarMetrics) = (UIImage *(*)(id, SEL, UIBarPosition, UIBarMetrics))originalIMPProvider(); return origin(selfObject, originCMD, firstArgv, secondArgv); }
+                    }
                     return selfObject.standardAppearance.backgroundImage;
                 };
             });
@@ -232,6 +277,10 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             
             OverrideImplementation([UINavigationBar class], @selector(shadowImage), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIImage *(UINavigationBar *selfObject) {
+                    if (@available(iOS 26.0, *)) {
+                        if (selfObject.topItem.standardAppearance && [selfObject.topItem qmui_getBoundBOOLForKey:@"qmuinb_usesNavigationItemAppearance"]) return selfObject.topItem.standardAppearance.shadowImage;
+                        if (!QMUICMIActivated) { UIImage *(*origin)(id, SEL) = (UIImage *(*)(id, SEL))originalIMPProvider(); return origin(selfObject, originCMD); }
+                    }
                     return selfObject.standardAppearance.shadowImage;
                 };
             });
@@ -288,47 +337,8 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
             if (!(NavBarRemoveBackgroundEffectAutomatically || TabBarRemoveBackgroundEffectAutomatically || ToolBarRemoveBackgroundEffectAutomatically)
                 && !(NavBarUsesStandardAppearanceOnly || TabBarUsesStandardAppearanceOnly || ToolBarUsesStandardAppearanceOnly)) return;
             
-            // - [_UIBarBackground updateBackground]
-            OverrideImplementation(NSClassFromString(@"_UIBarBackground"), NSSelectorFromString(@"updateBackground"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
-                return ^(UIView *selfObject) {
-                    
-                    // call super
-                    void (*originSelectorIMP)(id, SEL);
-                    originSelectorIMP = (void (*)(id, SEL))originalIMPProvider();
-                    originSelectorIMP(selfObject, originCMD);
-                    
-                    if (!selfObject.superview) return;
-                    if (!NavBarRemoveBackgroundEffectAutomatically && !NavBarUsesStandardAppearanceOnly && [selfObject.superview isKindOfClass:UINavigationBar.class]) return;
-                    if (!TabBarRemoveBackgroundEffectAutomatically && !TabBarUsesStandardAppearanceOnly && [selfObject.superview isKindOfClass:UITabBar.class]) return;
-                    if (!ToolBarRemoveBackgroundEffectAutomatically && !ToolBarUsesStandardAppearanceOnly && [selfObject.superview isKindOfClass:UIToolbar.class]) return;
-                    
-                    UIImageView *backgroundImageView1 = [selfObject valueForKey:@"_colorAndImageView1"];
-                    UIImageView *backgroundImageView2 = [selfObject valueForKey:@"_colorAndImageView2"];
-                    UIVisualEffectView *backgroundEffectView1 = [selfObject valueForKey:@"_effectView1"];
-                    UIVisualEffectView *backgroundEffectView2 = [selfObject valueForKey:@"_effectView2"];
-                    
-                    // iOS 14 系统默认特性是存在 backgroundImage 则不存在其他任何背景，但如果存在 barTintColor 则磨砂 view 也可以共存。
-                    // iOS 15 系统默认特性是 backgroundImage、backgroundColor、backgroundEffect 三者都可以共存，其中前两者共用 _colorAndImageView，而我们这个开关为了符合 iOS 14 的特性，仅针对 _colorAndImageView 是因为 backgroundImage 存在而出现的情况做处理。
-                    if (NavBarRemoveBackgroundEffectAutomatically || TabBarRemoveBackgroundEffectAutomatically || ToolBarRemoveBackgroundEffectAutomatically) {
-                        BOOL hasBackgroundImage1 = backgroundImageView1 && backgroundImageView1.superview && !backgroundImageView1.hidden && backgroundImageView1.image;
-                        BOOL hasBackgroundImage2 = backgroundImageView2 && backgroundImageView2.superview && !backgroundImageView2.hidden && backgroundImageView2.image;
-                        BOOL shouldHideEffectView = hasBackgroundImage1 || hasBackgroundImage2;
-                        if (shouldHideEffectView) {
-                            backgroundEffectView1.hidden = YES;
-                            backgroundEffectView2.hidden = YES;
-                        } else {
-                            // 把 backgroundImage 置为 nil，理应要恢复 effectView 的显示，但由于 iOS 15 里 effectView 有2个，什么时候显示哪个取决于 contentScrollView 的滚动位置，而这个位置在当前上下文里我们是无法得知的，所以先不处理了，交给系统在下一次 updateBackground 时刷新吧...
-                        }
-                    }
-                    
-                    // 虽然 4.4.0 增加的这些开关会保证 scrollEdgeAppearance 也被设置，但系统始终都会同时显示两份 view（一份 standard 的一份 scrollEdge 的），当你的样式是不透明时没问题，但如果存在半透明，同时显示两份 view 就会导致两个半透明的效果重叠在一起，最终肉眼看到的样式和预期是不符合的，所以 4.4.4 开始，我们会强制让其中一份 view 隐藏掉。
-                    if (NavBarUsesStandardAppearanceOnly || TabBarUsesStandardAppearanceOnly || ToolBarUsesStandardAppearanceOnly) {
-                        backgroundImageView2.hidden = YES;
-                        backgroundEffectView2.hidden = YES;
-                    }
-                };
-            });
-            
+            // 背景效果通过公开 appearance 配置，不再读取或隐藏系统私有背景子视图。
+
             // 尚未应用 UIAppearance 就已经修改 bar 的样式的场景，可能导致 bar 样式无法与全局保持一致，所以这里做个提醒
             // https://github.com/Tencent/QMUI_iOS/issues/1451
             // - [UINavigationBar setStandardAppearance:]
@@ -359,7 +369,31 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
 }
 
 - (UIView *)qmui_contentView {
-    return [self valueForKeyPath:@"visualProvider.contentView"];
+    // iOS 26 调整了 visualProvider，沿实际视图树查找，避免私有 KVC 路径失效导致闪退。
+    NSMutableArray<UIView *> *pendingViews = self.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < pendingViews.count; index++) {
+        UIView *view = pendingViews[index];
+        if ([NSStringFromClass(view.class) containsString:@"NavigationBarContentView"]) {
+            return view;
+        }
+        [pendingViews addObjectsFromArray:view.subviews];
+    }
+    // 容器改名时，从公开的自定义标题或按钮沿父视图回溯，避免固定私有类名成为唯一入口。
+    NSMutableArray<UIView *> *anchors = NSMutableArray.new;
+    if (self.topItem.titleView) [anchors addObject:self.topItem.titleView];
+    for (UIBarButtonItem *item in self.topItem.leftBarButtonItems) {
+        if (item.customView) [anchors addObject:item.customView];
+    }
+    for (UIBarButtonItem *item in self.topItem.rightBarButtonItems) {
+        if (item.customView) [anchors addObject:item.customView];
+    }
+    for (UIView *anchor in anchors) {
+        UIView *container = anchor;
+        while (container.superview && container.superview != self) container = container.superview;
+        if (container.superview == self && container != anchor) return container;
+    }
+    // 尚未布局或系统采用其他结构时允许为空，不把整条导航栏误当成内容容器。
+    return nil;
 }
 
 - (void)qmuinb_fixTitleViewLayoutInIOS16 {

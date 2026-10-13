@@ -241,7 +241,7 @@
     self.positionTitleLabel.qmui_top = maxY + CGFloatGetCenter(defaultLineHeight, CGRectGetHeight(self.positionTitleLabel.frame));
     maxY += defaultLineHeight;
     [@[self.positionTopButton, self.positionLeftButton, self.positionBottomButton, self.positionRightButton] enumerateObjectsUsingBlock:^(QMUIButton *obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        obj.contentEdgeInsets = UIEdgeInsetsMake(0, marginLeft + 18, 0, marginRight);
+        obj.qmui_contentInsets = UIEdgeInsetsMake(0, marginLeft + 18, 0, marginRight);
         obj.qmui_top = maxY;
         obj.qmui_width = CGRectGetWidth(self.scrollView.bounds);
         obj.qmui_height = 32;
@@ -275,7 +275,7 @@
     self.maskedCornersTitleLabel.qmui_top = maxY + CGFloatGetCenter(defaultLineHeight, CGRectGetHeight(self.maskedCornersTitleLabel.frame));
     maxY += defaultLineHeight;
     [@[self.maskedCornersMinXMinYButton, self.maskedCornersMaxXMinYButton, self.maskedCornersMinXMaxYButton, self.maskedCornersMaxXMaxYButton] enumerateObjectsUsingBlock:^(QMUIButton *obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        obj.contentEdgeInsets = UIEdgeInsetsMake(0, marginLeft + 18, 0, marginRight);
+        obj.qmui_contentInsets = UIEdgeInsetsMake(0, marginLeft + 18, 0, marginRight);
         obj.qmui_top = maxY;
         obj.qmui_width = CGRectGetWidth(self.scrollView.bounds);
         obj.qmui_height = 32;

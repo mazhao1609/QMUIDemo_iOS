@@ -142,7 +142,7 @@ static NSMutableArray <QMUIToastView *> *kToastViews = nil;
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    
+    // 父视图布局变化（分屏、旋转、场景调整）时重新计算内容位置。
     self.frame = self.parentView.bounds;
     self.dimmingView.frame = self.bounds;
     
@@ -190,14 +190,14 @@ static NSMutableArray <QMUIToastView *> *kToastViews = nil;
 #pragma mark - 横竖屏
 
 - (void)registerNotifications {
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(statusBarOrientationDidChange:) name:UIApplicationDidChangeStatusBarOrientationNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceOrientationDidChange:) name:UIDeviceOrientationDidChangeNotification object:nil];
 }
 
 - (void)removeNotifications {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidChangeStatusBarOrientationNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIDeviceOrientationDidChangeNotification object:nil];
 }
 
-- (void)statusBarOrientationDidChange:(NSNotification *)notification {
+- (void)deviceOrientationDidChange:(NSNotification *)notification {
     if (!self.parentView) {
         return;
     }

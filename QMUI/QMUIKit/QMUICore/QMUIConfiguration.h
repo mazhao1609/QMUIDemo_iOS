@@ -96,10 +96,27 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic, assign) BOOL               navBarUsesStandardAppearanceOnly API_AVAILABLE(ios(15.0));
 @property(nonatomic, copy, nullable) NSArray<Class<UIAppearanceContainer>> *navBarContainerClasses;
+/**
+ iOS 15 及以后统一使用普通导航栏按钮及相同布局，默认 NO。
+ 开启后自动处理返回箭头、文字/图标按钮，默认内容距安全区域边缘 16pt、相邻内容间距 8pt，可通过下方配置项修改。
+ 仅作用于 navBarContainerClasses 指定的项目导航控制器；未指定时仅作用于 QMUINavigationController。
+ 导航栏背景、标题和系统转场保持原样，关闭后恢复原有按钮视图和背景设置。请在主线程设置。
+ */
+@property(nonatomic, assign) BOOL               navBarUsesLegacyButtonLayout;
 @property(nonatomic, assign) CGFloat            navBarHighlightedAlpha;
 @property(nonatomic, assign) CGFloat            navBarDisabledAlpha;
 @property(nonatomic, strong, nullable) UIFont   *navBarButtonFont;
 @property(nonatomic, strong, nullable) UIFont   *navBarButtonFontBold;
+/// 普通布局下图标按比例缩放到该范围，默认 24x24；CGSizeZero 保留原尺寸，返回/关闭图标使用各自的图片配置。
+@property(nonatomic, assign) CGSize             navBarButtonImageSize;
+/// 导航栏图标与文字之间的间距，默认 6pt。
+@property(nonatomic, assign) CGFloat            navBarButtonImagePadding;
+/// 导航栏按钮内容与屏幕安全区域的距离，默认 16pt，仅用于普通按钮布局。
+@property(nonatomic, assign) CGFloat            navBarButtonContentEdgeDistance;
+/// 多个导航栏按钮内容之间的间距，默认 8pt，仅用于普通按钮布局。
+@property(nonatomic, assign) CGFloat            navBarButtonItemSpacing;
+/// 图标按钮的左右内容内边距，默认 11pt；相邻按钮的实际点击范围还会按内容间距限制。
+@property(nonatomic, assign) CGFloat            navBarButtonContentHorizontalPadding;
 @property(nonatomic, strong, nullable) UIImage  *navBarBackgroundImage;
 @property(nonatomic, assign) BOOL               navBarRemoveBackgroundEffectAutomatically API_AVAILABLE(ios(15.0));
 @property(nonatomic, strong, nullable) UIImage  *navBarShadowImage;

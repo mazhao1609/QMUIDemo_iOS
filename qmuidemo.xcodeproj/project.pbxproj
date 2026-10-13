@@ -10,6 +10,7 @@
 		08ACAA7122D66747008530C5 /* QDLargeTitlesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 08ACAA7022D66747008530C5 /* QDLargeTitlesViewController.m */; };
 		165F42F61ADB60180057EF6A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 165F42F51ADB60180057EF6A /* main.m */; };
 		165F42F91ADB60180057EF6A /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 165F42F81ADB60180057EF6A /* AppDelegate.m */; };
+		D0A13E5E261013000057EF6A /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = D0A13E5D261013000057EF6A /* SceneDelegate.m */; };
 		165F43011ADB60180057EF6A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 165F43001ADB60180057EF6A /* Images.xcassets */; };
 		165F43041ADB60180057EF6A /* LaunchScreen.xib in Resources */ = {isa = PBXBuildFile; fileRef = 165F43021ADB60180057EF6A /* LaunchScreen.xib */; };
 		165F435F1ADB71FF0057EF6A /* image1@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 165F43561ADB71FF0057EF6A /* image1@2x.png */; };
@@ -233,6 +234,8 @@
 		165F42F51ADB60180057EF6A /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		165F42F71ADB60180057EF6A /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		165F42F81ADB60180057EF6A /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		D0A13E5C261013000057EF6A /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
+		D0A13E5D261013000057EF6A /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
 		165F43001ADB60180057EF6A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		165F43031ADB60180057EF6A /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/LaunchScreen.xib; sourceTree = "<group>"; };
 		165F43561ADB71FF0057EF6A /* image1@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "image1@2x.png"; sourceTree = "<group>"; };
@@ -588,6 +591,8 @@
 				CDFE9573293FA58A007AE1AA /* qmuidemo.entitlements */,
 				165F42F71ADB60180057EF6A /* AppDelegate.h */,
 				165F42F81ADB60180057EF6A /* AppDelegate.m */,
+				D0A13E5C261013000057EF6A /* SceneDelegate.h */,
+				D0A13E5D261013000057EF6A /* SceneDelegate.m */,
 				165F43001ADB60180057EF6A /* Images.xcassets */,
 				4CD323972109B362007033C9 /* Localizable.strings */,
 				165F43021ADB60180057EF6A /* LaunchScreen.xib */,
@@ -1303,6 +1308,7 @@
 				CD4A05F220288980000159E9 /* QDNavigationTransitionViewController.m in Sources */,
 				CDB8C9FE1DCC815A00769DF0 /* QDChangeNavBarStyleViewController.m in Sources */,
 				165F42F91ADB60180057EF6A /* AppDelegate.m in Sources */,
+				D0A13E5E261013000057EF6A /* SceneDelegate.m in Sources */,
 				CDB8C9EC1DCC815A00769DF0 /* QDSaveVideoToSpecifiedAlbumViewController.m in Sources */,
 				CDB8C9FC1DCC815A00769DF0 /* QDAlertController.m in Sources */,
 				CDB8CA0E1DCC815A00769DF0 /* QDNavigationListViewController.m in Sources */,
@@ -1503,7 +1509,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -1552,7 +1558,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1573,7 +1579,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 17;
-				DEVELOPMENT_TEAM = PM6KH29YH2;
+				DEVELOPMENT_TEAM = 25NWVL7TC7;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1584,7 +1590,7 @@
 				GCC_PREFIX_HEADER = ./qmuidemo/PrefixHeader.pch;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = qmuidemo/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1623,7 +1629,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 17;
-				DEVELOPMENT_TEAM = PM6KH29YH2;
+				DEVELOPMENT_TEAM = 25NWVL7TC7;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1634,7 +1640,7 @@
 				GCC_PREFIX_HEADER = ./qmuidemo/PrefixHeader.pch;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = qmuidemo/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1670,7 +1676,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = QMUIDemoUITests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1698,7 +1704,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = QMUIDemoUITests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1727,11 +1733,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 17;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = PM6KH29YH2;
+				DEVELOPMENT_TEAM = 25NWVL7TC7;
 				ENABLE_BITCODE = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = QMUIKeyboard/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1762,11 +1768,11 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 17;
-				DEVELOPMENT_TEAM = PM6KH29YH2;
+				DEVELOPMENT_TEAM = 25NWVL7TC7;
 				ENABLE_BITCODE = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				INFOPLIST_FILE = QMUIKeyboard/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

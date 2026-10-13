@@ -56,7 +56,22 @@
 }
 
 - (UIButton *)qmui_clearButton {
-    return [self qmui_valueForKey:@"clearButton"];
+    // 已存在的对象 getter 可直接调用，不触发 UIKit 的私有属性 KVC 检查。
+    SEL selector = NSSelectorFromString(@"clearButton");
+    if ([self respondsToSelector:selector] && [self methodSignatureForSelector:selector].methodReturnType[0] == '@') {
+        BeginIgnorePerformSelectorLeaksWarning
+        id button = [self performSelector:selector];
+        EndIgnorePerformSelectorLeaksWarning
+        if ([button isKindOfClass:UIButton.class]) return button;
+    }
+    // 清除按钮是可选的内部视图，不假设 UIKit 始终保留同名私有属性。
+    NSMutableArray<UIView *> *views = self.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < views.count; index++) {
+        UIView *view = views[index];
+        if ([view isKindOfClass:UIButton.class] && [NSStringFromClass(view.class) containsString:@"ClearButton"]) return (UIButton *)view;
+        [views addObjectsFromArray:view.subviews];
+    }
+    return nil;
 }
 
 static char kAssociatedObjectKey_clearButtonImage;

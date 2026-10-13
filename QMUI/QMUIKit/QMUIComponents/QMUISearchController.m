@@ -250,7 +250,7 @@ BeginIgnoreDeprecatedWarning
                     self.dismissBySwipe = YES;
                     // 盖到最上面，挡住退出搜索过程中可能出现的界面闪烁
                     [self.snapshotView removeFromSuperview];
-                    [UIApplication.sharedApplication.delegate.window addSubview:self.snapshotView];
+                    [QMUIHelper.mainWindow addSubview:self.snapshotView];
                     QMUILogInfo(@"QMUISearchController", @"swipeGesture snapshot change superview to window");
                     self.active = NO;
                     self.searchController.view.transform = CGAffineTransformIdentity;
@@ -285,7 +285,7 @@ BeginIgnoreDeprecatedWarning
         self.snapshotMaskView = [[UIView alloc] init];
         self.snapshotMaskView.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:.1];
     }
-    self.snapshotView = [UIApplication.sharedApplication.delegate.window snapshotViewAfterScreenUpdates:NO];
+    self.snapshotView = [QMUIHelper.mainWindow snapshotViewAfterScreenUpdates:NO];
     self.snapshotMaskView.frame = self.snapshotView.bounds;
     [self.snapshotView addSubview:self.snapshotMaskView];
     if (!self.swipeGestureRecognizer) {
@@ -293,7 +293,7 @@ BeginIgnoreDeprecatedWarning
         self.swipeGestureRecognizer.edges = UIRectEdgeLeft;
         self.swipeGestureRecognizer.delegate = self;
     }
-    [UIApplication.sharedApplication.delegate.window addGestureRecognizer:self.swipeGestureRecognizer];
+    [QMUIHelper.mainWindow addGestureRecognizer:self.swipeGestureRecognizer];
 }
 
 - (void)resetSnapshotObjects {
@@ -305,7 +305,7 @@ BeginIgnoreDeprecatedWarning
     [self.snapshotView removeFromSuperview];
     [self.snapshotMaskView removeFromSuperview];
     self.snapshotView = nil;
-    [UIApplication.sharedApplication.delegate.window removeGestureRecognizer:self.swipeGestureRecognizer];
+    [QMUIHelper.mainWindow removeGestureRecognizer:self.swipeGestureRecognizer];
     QMUILogInfo(@"QMUISearchController", @"swipeGesture clean all objects");
 }
 

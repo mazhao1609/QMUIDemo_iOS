@@ -15,7 +15,7 @@ Pod::Spec.new do |s|
   s.documentation_url = 'https://github.com/Tencent/QMUI_iOS'
   s.screenshot       = 'https://cloud.githubusercontent.com/assets/1190261/26751376/63f96538-486a-11e7-81cf-5bc83a945207.png'
 
-  s.platform         = :ios, '13.0'
+  s.platform         = :ios, '15.0'
   s.frameworks       = 'Foundation', 'UIKit', 'CoreGraphics'
   s.preserve_paths   = 'QMUIConfigurationTemplate/*'
   s.source_files     = 'QMUIKit/QMUIKit.h'
@@ -355,7 +355,7 @@ Pod::Spec.new do |s|
 
     ss.subspec 'QMUIAssetLibrary' do |sss|
       sss.source_files = 'QMUIKit/QMUIComponents/AssetLibrary/*.{h,m}'
-      sss.frameworks = 'Photos', 'CoreServices'
+      sss.frameworks = 'Photos', 'UniformTypeIdentifiers'
     end
 
     ss.subspec 'QMUIImagePickerLibrary' do |sss|

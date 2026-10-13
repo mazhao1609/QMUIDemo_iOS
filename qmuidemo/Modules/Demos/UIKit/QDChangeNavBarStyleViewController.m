@@ -11,6 +11,8 @@
 @interface QDChangeNavBarStyleViewController ()
 
 @property(nonatomic, assign) QDNavigationBarStyle barStyle;
+@property(nonatomic, strong) UIBarButtonItem *buttonStyleItem;
+@property(nonatomic, strong) UISwitch *buttonStyleSwitch;
 
 @end
 
@@ -23,15 +25,65 @@
     return self;
 }
 
+- (void)viewDidLoad {
+    if (@available(iOS 26.0, *)) {
+        // 先准备开关，保证父类创建首行单元格时已经有 accessoryView。
+        self.buttonStyleSwitch = UISwitch.new;
+        self.buttonStyleSwitch.accessibilityLabel = @"全局旧版导航栏按钮";
+        [self.buttonStyleSwitch addTarget:self action:@selector(handleButtonStyleSwitch:) forControlEvents:UIControlEventValueChanged];
+        self.buttonStyleSwitch.on = NavBarUsesLegacyButtonLayout;
+    }
+    [super viewDidLoad];
+    if (@available(iOS 26.0, *)) {
+        self.buttonStyleItem = [UIBarButtonItem qmui_itemWithTitle:@"普通按钮" target:self action:@selector(handleToggleNavigationButtons)];
+        self.buttonStyleItem.accessibilityLabel = @"切换导航栏按钮样式";
+        UIBarButtonItem *imageItem = [UIBarButtonItem qmui_itemWithImage:[UIImage systemImageNamed:@"circle.lefthalf.filled"] target:self action:@selector(handleToggleNavigationButtons)];
+        imageItem.accessibilityLabel = @"切换按钮样式";
+        self.navigationItem.rightBarButtonItems = @[self.buttonStyleItem, imageItem];
+        [self updateNavigationButtonStyle];
+    }
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self updateNavigationButtonStyle];
+}
+
+- (void)handleToggleNavigationButtons {
+    QMUICMI.navBarUsesLegacyButtonLayout = !NavBarUsesLegacyButtonLayout;
+    [self updateNavigationButtonStyle];
+}
+
+- (void)handleButtonStyleSwitch:(UISwitch *)sender {
+    QMUICMI.navBarUsesLegacyButtonLayout = sender.on;
+    [self updateNavigationButtonStyle];
+}
+
+- (void)updateNavigationButtonStyle {
+    self.buttonStyleItem.title = NavBarUsesLegacyButtonLayout ? @"普通按钮" : @"玻璃按钮";
+    self.buttonStyleSwitch.on = NavBarUsesLegacyButtonLayout;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    BOOL isSwitch = [self.dataSource[indexPath.row] isEqualToString:@"全局旧版导航栏按钮"];
+    cell.accessoryView = isSwitch ? self.buttonStyleSwitch : nil;
+    cell.accessoryType = isSwitch ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
+    cell.selectionStyle = isSwitch ? UITableViewCellSelectionStyleNone : UITableViewCellSelectionStyleDefault;
+    return cell;
+}
+
 - (void)initDataSource {
     [super initDataSource];
     self.dataSource = @[@"默认",
                         @"深色",
                         @"浅色（磨砂）"];
+    if (@available(iOS 26.0, *)) self.dataSource = [@[@"全局旧版导航栏按钮"] arrayByAddingObjectsFromArray:self.dataSource];
 }
 
 - (void)didSelectCellWithTitle:(NSString *)title {
-    UIViewController *viewController = nil;
+    if ([title isEqualToString:@"全局旧版导航栏按钮"]) return;
+    QDChangeNavBarStyleViewController *viewController = nil;
     if ([title isEqualToString:@"默认"]) {
         viewController = [[QDChangeNavBarStyleViewController alloc] initWithBarStyle:QDNavigationBarStyleOrigin];
     }
@@ -55,11 +107,24 @@
 
 #pragma mark - QMUINavigationControllerDelegate
 
+- (UIBarStyle)qmui_navigationBarStyle {
+    // 浅色磨砂不继承深色主题或上一页的材料样式。
+    return self.barStyle == QDNavigationBarStyleLight ? UIBarStyleDefault : NavBarStyle;
+}
+
+- (UIColor *)qmui_navigationBarBarTintColor {
+    // 显式提供半透明主题色，两版系统都呈现有色磨砂，不继承上一页残留的背景图。
+    if (self.barStyle == QDNavigationBarStyleLight) {
+        return [(NavBarBarTintColor ?: UIColor.qd_tintColor) colorWithAlphaComponent:.55];
+    }
+    return NavBarBarTintColor;
+}
+
 - (UIImage *)qmui_navigationBarBackgroundImage {
     if (self.barStyle == QDNavigationBarStyleOrigin) {
         return NavBarBackgroundImage;
     } else if (self.barStyle == QDNavigationBarStyleLight) {
-        return nil; // nil则用系统默认颜色（带磨砂）
+        return nil; // 使用系统磨砂与上面声明的半透明背景色，不用不透明背景图遮挡材料。
     } else if (self.barStyle == QDNavigationBarStyleDark) {
         return [UIImage qmui_imageWithColor:UIColorMake(66, 66, 66)];
     } else {

@@ -163,7 +163,7 @@
 - (NSInteger)preferredFramesPerSecond {
     if (self.displayLink.preferredFramesPerSecond == 0) {
         // 不能写死60，而要拿当前设备支持的最大帧率来计算。根据 CADisplayLink 的官方文档，如果返回一个超过当前设备实际帧率的数字，实际依然会用设备实际帧率来计算，所以不用担心设备降频导致帧率降低后动画时长是否有问题。
-        return UIScreen.mainScreen.maximumFramesPerSecond;
+        return QMUIHelper.screen.maximumFramesPerSecond;
     }
     return self.displayLink.preferredFramesPerSecond;
 }

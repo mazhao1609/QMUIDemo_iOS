@@ -81,9 +81,10 @@ static NSString * const kQMUIUserInterfaceStyleWillChangeSelectorsKey = @"qmui_u
                         firstValidatedWindow = selfObject;
                     } else {
                         // 系统会按照这个数组的顺序去更新 window 的 traitCollection，找出最先响应样式更新的 window
-                        NSPointerArray *windows = [[selfObject windowScene] valueForKeyPath:@"_contextBinder._attachedBindables"];
+                        // 使用公开窗口集合，避免 iOS 26 场景内部结构变化造成异常。
+                        NSArray<UIWindow *> *windows = selfObject.windowScene.windows;
                         for (NSUInteger i = 0, count = windows.count; i < count; i++) {
-                            UIWindow *window = [windows pointerAtIndex:i];
+                            UIWindow *window = windows[i];
                             // 例如用 UIWindow 方式显示的弹窗，在消失后，在 windows 数组里会残留一个 nil 的位置，这里过滤掉，否则会导致 App 从桌面唤醒时无法立即显示正确的 style
                             if (!window) {
                                 continue;;

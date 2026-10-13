@@ -16,6 +16,22 @@
 #import "UIInterface+QMUI.h"
 #import "QMUICore.h"
 
+// 物理方向与界面方向的左右横屏枚举相反，不能直接比较或强制转换。
+static UIInterfaceOrientation QMUIInterfaceOrientationFromDeviceOrientation(UIDeviceOrientation deviceOrientation) {
+    switch (deviceOrientation) {
+        case UIDeviceOrientationPortrait:
+            return UIInterfaceOrientationPortrait;
+        case UIDeviceOrientationPortraitUpsideDown:
+            return UIInterfaceOrientationPortraitUpsideDown;
+        case UIDeviceOrientationLandscapeLeft:
+            return UIInterfaceOrientationLandscapeRight;
+        case UIDeviceOrientationLandscapeRight:
+            return UIInterfaceOrientationLandscapeLeft;
+        default:
+            return UIInterfaceOrientationUnknown;
+    }
+}
+
 @implementation QMUIHelper (QMUI_Interface)
 
 QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientationChangedByHelper)
@@ -31,8 +47,8 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
     if (UIDevice.currentDevice.orientation == UIDeviceOrientationUnknown) return UIDeviceOrientationUnknown;
     
     // mask 包含多个方向值，如果要转换的 mask 方向已经包含当前设备方向，则直接返回当前设备方向，以免外面要用这个返回值去做方向旋转时出现不必要的旋转。
-    UIInterfaceOrientationMask orientation = 1 << (UIInterfaceOrientation)UIDevice.currentDevice.orientation;
-    if (mask & orientation) {
+    UIInterfaceOrientation orientation = QMUIInterfaceOrientationFromDeviceOrientation(UIDevice.currentDevice.orientation);
+    if (orientation != UIInterfaceOrientationUnknown && [self interfaceOrientationMask:mask containsInterfaceOrientation:orientation]) {
         return UIDevice.currentDevice.orientation;
     }
     
@@ -55,37 +71,21 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
 }
 
 + (BOOL)interfaceOrientationMask:(UIInterfaceOrientationMask)mask containsDeviceOrientation:(UIDeviceOrientation)deviceOrientation {
-    if (deviceOrientation == UIDeviceOrientationUnknown) {
-        return YES;// YES 表示不用额外处理
-    }
-    
-    if ((mask & UIInterfaceOrientationMaskAll) == UIInterfaceOrientationMaskAll) {
-        return YES;
-    }
-    if ((mask & UIInterfaceOrientationMaskAllButUpsideDown) == UIInterfaceOrientationMaskAllButUpsideDown) {
-        return UIInterfaceOrientationPortraitUpsideDown != deviceOrientation;
-    }
-    if ((mask & UIInterfaceOrientationMaskPortrait) == UIInterfaceOrientationMaskPortrait) {
-        return UIInterfaceOrientationPortrait == deviceOrientation;
-    }
-    if ((mask & UIInterfaceOrientationMaskLandscape) == UIInterfaceOrientationMaskLandscape) {
-        return UIInterfaceOrientationLandscapeLeft == deviceOrientation || UIInterfaceOrientationLandscapeRight == deviceOrientation;
-    }
-    if ((mask & UIInterfaceOrientationMaskLandscapeLeft) == UIInterfaceOrientationMaskLandscapeLeft) {
-        return UIInterfaceOrientationLandscapeLeft == deviceOrientation;
-    }
-    if ((mask & UIInterfaceOrientationMaskLandscapeRight) == UIInterfaceOrientationMaskLandscapeRight) {
-        return UIInterfaceOrientationLandscapeRight == deviceOrientation;
-    }
-    if ((mask & UIInterfaceOrientationMaskPortraitUpsideDown) == UIInterfaceOrientationMaskPortraitUpsideDown) {
-        return UIInterfaceOrientationPortraitUpsideDown == deviceOrientation;
-    }
-    
-    return YES;
+    return [self interfaceOrientationMask:mask containsInterfaceOrientation:QMUIInterfaceOrientationFromDeviceOrientation(deviceOrientation)];
 }
 
 + (BOOL)interfaceOrientationMask:(UIInterfaceOrientationMask)mask containsInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation {
-    return [self interfaceOrientationMask:mask containsDeviceOrientation:(UIDeviceOrientation)interfaceOrientation];
+    switch (interfaceOrientation) {
+        case UIInterfaceOrientationPortrait:
+        case UIInterfaceOrientationPortraitUpsideDown:
+        case UIInterfaceOrientationLandscapeLeft:
+        case UIInterfaceOrientationLandscapeRight:
+            // 直接检查对应位，支持竖屏与任一横屏组合，避免只匹配第一个方向。
+            return (mask & ((UIInterfaceOrientationMask)1 << interfaceOrientation)) != 0;
+        default:
+            // 未知、平放等方向不触发额外旋转。
+            return YES;
+    }
 }
 
 + (CGFloat)angleForTransformWithInterfaceOrientation:(UIInterfaceOrientation)orientation {
@@ -109,7 +109,7 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
 }
 
 + (CGAffineTransform)transformForCurrentInterfaceOrientation {
-    return [QMUIHelper transformWithInterfaceOrientation:UIApplication.sharedApplication.statusBarOrientation];
+    return [QMUIHelper transformWithInterfaceOrientation:QMUIHelper.interfaceOrientation];
 }
 
 + (CGAffineTransform)transformWithInterfaceOrientation:(UIInterfaceOrientation)orientation {
@@ -151,7 +151,7 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
                 }
                 
                 
-                UIInterfaceOrientation statusBarOrientation = UIApplication.sharedApplication.statusBarOrientation;
+                UIInterfaceOrientation statusBarOrientation = QMUIHelper.interfaceOrientation;
                 UIDeviceOrientation lastOrientationChangedByHelper = [QMUIHelper sharedInstance].lastOrientationChangedByHelper;
                 BOOL shouldConsiderLastChanged = lastOrientationChangedByHelper != UIDeviceOrientationUnknown;
                 UIDeviceOrientation deviceOrientation = [UIDevice currentDevice].orientation;
@@ -187,15 +187,15 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
         
         [self setNeedsUpdateOfSupportedInterfaceOrientations];
         
-        __block BOOL result = YES;
+        if (interfaceOrientation == UIInterfaceOrientationUnknown) return NO;
         UIInterfaceOrientationMask mask = 1 << interfaceOrientation;
-        UIWindow *window = self.view.window ?: UIApplication.sharedApplication.delegate.window;
-        [window.windowScene requestGeometryUpdateWithPreferences:[[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask] errorHandler:^(NSError * _Nonnull error) {
-            if (error) {
-                result = NO;
-            }
+        UIWindowScene *scene = (self.isViewLoaded ? self.view.window : nil).windowScene ?: QMUIHelper.keyWindow.windowScene;
+        if (!scene) return NO;
+        [scene requestGeometryUpdateWithPreferences:[[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask] errorHandler:^(NSError * _Nonnull error) {
+            QMUILogWarn(@"Interface (QMUI)", @"场景旋转请求失败：%@", error);
         }];
-        return result;
+        // 系统异步处理；YES 表示已发出请求，不代表旋转已完成。
+        return YES;
     }
 #endif
     

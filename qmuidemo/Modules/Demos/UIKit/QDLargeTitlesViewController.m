@@ -37,7 +37,8 @@
 
 - (void)didSelectCellWithTitle:(NSString *)title {
     if ([title isEqualToString:@"滚动试试"]) {
-        CGPoint contentOffsetWhenLargeTitleDisplaying = CGPointMake(0, -(NavigationContentTop + 52));
+        CGFloat navigationContentTop = self.qmui_navigationBarMaxYInViewCoordinator;
+        CGPoint contentOffsetWhenLargeTitleDisplaying = CGPointMake(0, -(navigationContentTop + 52));
         if (CGPointEqualToPoint(self.tableView.contentOffset, contentOffsetWhenLargeTitleDisplaying)) {
             [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:3 inSection:0] atScrollPosition:UITableViewScrollPositionTop animated:YES];
         } else {
@@ -64,7 +65,7 @@
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
     // 上个界面如果不是 QDLargeTitlesViewController 就还原 prefersLargeTitles，以免影响其他界面
-    UIViewController *currentViewController = UIApplication.sharedApplication.keyWindow.rootViewController.qmui_visibleViewControllerIfExist;
+    UIViewController *currentViewController = QMUIHelper.keyWindow.rootViewController.qmui_visibleViewControllerIfExist;
     if ([currentViewController class] != [QDLargeTitlesViewController class]) {
         currentViewController.navigationController.navigationBar.prefersLargeTitles = NO;
     }

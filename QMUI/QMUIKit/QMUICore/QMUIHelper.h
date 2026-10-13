@@ -15,13 +15,31 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import "QMUICommonDefines.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface QMUIHelper : NSObject
 
 + (instancetype)sharedInstance;
+
+/// 当前前台场景的关键窗口；无 Scene 的宿主回退到 AppDelegate.window。
++ (nullable UIWindow *)keyWindow;
+/// 当前前台场景的普通业务窗口，避免浮层窗口成为关键窗口后改变主界面上下文。
++ (nullable UIWindow *)mainWindow;
+/// 已连接场景的窗口集合，用于主题刷新等跨窗口操作。
++ (NSArray<UIWindow *> *)applicationWindows;
+/// 返回视图所属的窗口；视图尚未显示时回退到当前前台业务窗口。
++ (nullable UIWindow *)windowForView:(nullable UIView *)view;
+/// 返回视图所属窗口的安全区。布局代码应优先传入当前页面的 view，避免多窗口时串用其他场景。
++ (UIEdgeInsets)safeAreaInsetsForView:(nullable UIView *)view;
+/// 当前场景的界面方向，启动早期回退为竖屏。
++ (UIInterfaceOrientation)interfaceOrientation;
+/// 返回视图所属场景的界面方向；视图没有窗口时回退到前台场景。
++ (UIInterfaceOrientation)interfaceOrientationForView:(nullable UIView *)view;
+/// 当前场景的状态栏高度，隐藏或尚未连接场景时为 0。
++ (CGFloat)statusBarHeight;
+/// 优先使用窗口所属屏幕，避免依赖已废弃的 mainScreen。
++ (UIScreen *)screen;
 
 /**
  用一个 identifier 标记某一段 block，使其对应该 identifier 只会被运行一次
@@ -163,10 +181,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// @NEW_DEVICE_CHECKER
 @property(class, nonatomic, readonly) BOOL isRegularScreen;
 
-/// iPhone 16 Pro Max
+/// 440×956，iPhone 16 / 17 / 18 Pro Max（标准显示模式）
 @property(class, nonatomic, readonly) BOOL is69InchScreen;
 
-/// iPhone 14 Pro Max
+/// iPhone 14 / 15 Pro Max、16 Plus
 @property(class, nonatomic, readonly) BOOL is67InchScreenAndiPhone14Later;
 
 /// iPhone 14 Plus / 13 Pro Max / 12 Pro Max
@@ -175,13 +193,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// iPhone XS Max / 11 Pro Max
 @property(class, nonatomic, readonly) BOOL is65InchScreen;
 
-/// iPhone 16 Pro
+/// 420×912，iPhone Air（标准显示模式）；与旧款 6.5 英寸分别判断。
+@property(class, nonatomic, readonly) BOOL is65InchScreenAndiPhoneAir;
+
+/// 402×874，iPhone 16 Pro、17 / 17 Pro / 18 Pro（标准显示模式）
 @property(class, nonatomic, readonly) BOOL is63InchScreen;
 
-/// iPhone 12 / 12 Pro
+/// iPhone 12 / 12 Pro / 13 / 13 Pro / 14 / 16e / 17e
 @property(class, nonatomic, readonly) BOOL is61InchScreenAndiPhone12Later;
 
-/// iPhone 14 Pro / 15 Pro
+/// iPhone 14 / 15 Pro、15 / 16
 @property(class, nonatomic, readonly) BOOL is61InchScreenAndiPhone14ProLater;
 
 /// iPhone XR / 11
@@ -209,6 +230,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(class, nonatomic, readonly) CGSize screenSizeFor67InchAndiPhone14Later;
 @property(class, nonatomic, readonly) CGSize screenSizeFor67Inch;
 @property(class, nonatomic, readonly) CGSize screenSizeFor65Inch;
+@property(class, nonatomic, readonly) CGSize screenSizeFor65InchAndiPhoneAir;
 @property(class, nonatomic, readonly) CGSize screenSizeFor63Inch;
 @property(class, nonatomic, readonly) CGSize screenSizeFor61InchAndiPhone14ProLater;
 @property(class, nonatomic, readonly) CGSize screenSizeFor61InchAndiPhone12Later;
@@ -223,6 +245,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(class, nonatomic, readonly) CGFloat preferredLayoutAsSimilarScreenWidthForIPad;
 
 /// 用于获取 isNotchedScreen 设备的 insets，注意对于无 Home 键的新款 iPad 而言，它不一定有物理凹槽，但因为使用了 Home Indicator，所以它的 safeAreaInsets 也是非0。
+/// 优先读取窗口真实安全区；缺少静态数据且窗口未就绪时返回 UIEdgeInsetsZero，应在布局时重新读取。
 /// @NEW_DEVICE_CHECKER
 @property(class, nonatomic, readonly) UIEdgeInsets safeAreaInsetsForDeviceWithNotch;
 
@@ -233,12 +256,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// @NEW_DEVICE_CHECKER
 @property(class, nonatomic, readonly) BOOL isZoomedMode;
 
-/// 当前设备是否拥有灵动岛
+/// 当前设备是否拥有灵动岛；仅匹配已确认的型号，16e、17e 和未知设备返回 NO。
 /// @NEW_DEVICE_CHECKER
 @property(class, nonatomic, readonly) BOOL isDynamicIslandDevice;
 
 /**
- 在 iPad 分屏模式下可获得实际运行区域的窗口大小，如需适配 iPad 分屏，建议用这个方法来代替 [UIScreen mainScreen].bounds.size
+ 在 iPad 分屏模式下可获得实际运行区域的窗口大小，如需适配 iPad 分屏，建议用这个方法来代替 QMUIHelper.screen.bounds.size
  @return 应用运行的窗口大小
  */
 @property(class, nonatomic, readonly) CGSize applicationSize;
@@ -253,6 +276,11 @@ NS_ASSUME_NONNULL_BEGIN
  静态的导航栏高度，在导航栏不可见时也会根据机型返回导航栏的固定高度
  */
 @property(class, nonatomic, readonly) CGFloat navigationBarMaxYConstant;
+
+/// 返回页面当前导航栏的实际高度；页面尚未布局时回退到兼容常量。
++ (CGFloat)navigationBarHeightForViewController:(nullable UIViewController *)viewController;
+/// 返回页面当前 TabBar 的实际高度；页面尚未布局时回退到兼容常量。
++ (CGFloat)tabBarHeightForViewController:(nullable UIViewController *)viewController;
 
 @end
 
@@ -301,3 +329,6 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
+
+// 宏内联函数会调用 QMUIHelper，放在声明之后以避免循环导入。
+#import "QMUICommonDefines.h"

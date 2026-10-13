@@ -16,6 +16,7 @@
 #import "UIBarItem+QMUI.h"
 #import "QMUICore.h"
 #import "UIView+QMUI.h"
+#import <objc/message.h>
 
 @interface UIBarItem ()
 
@@ -43,9 +44,12 @@
 
 - (UIView *)qmui_view {
     // UIBarItem 本身没有 view 属性，只有子类 UIBarButtonItem 和 UITabBarItem 才有
-    if ([self respondsToSelector:@selector(view)]) {
-        return [self qmui_valueForKey:@"view"];
+    if ([self respondsToSelector:@selector(view)] && [self methodSignatureForSelector:@selector(view)].methodReturnType[0] == '@') {
+        // 只调用已存在的 getter，绕开 UIKit 禁止私有属性 KVC 的异常。
+        UIView *view = ((UIView *(*)(id, SEL))objc_msgSend)(self, @selector(view));
+        if ([view isKindOfClass:UIView.class]) return view;
     }
+    if ([self isKindOfClass:UIBarButtonItem.class]) return ((UIBarButtonItem *)self).customView;
     return nil;
 }
 

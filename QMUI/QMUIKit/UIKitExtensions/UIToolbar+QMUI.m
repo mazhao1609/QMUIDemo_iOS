@@ -28,12 +28,18 @@
             
             void (^syncAppearance)(UIToolbar *, void(^barActionBlock)(UIToolbarAppearance *appearance)) = ^void(UIToolbar *toolbar, void(^barActionBlock)(UIToolbarAppearance *appearance)) {
                 if (!barActionBlock) return;
+                if (@available(iOS 26.0, *)) {
+                    if (!QMUICMIActivated) return;
+                }
                 
                 UIToolbarAppearance *appearance = toolbar.standardAppearance;
                 barActionBlock(appearance);
+                if (QMUICMIActivated && ToolBarRemoveBackgroundEffectAutomatically && appearance.backgroundImage) appearance.backgroundEffect = nil;
                 toolbar.standardAppearance = appearance;
                 if (QMUICMIActivated && ToolBarUsesStandardAppearanceOnly) {
                     toolbar.scrollEdgeAppearance = appearance;
+                    toolbar.compactAppearance = appearance;
+                    toolbar.compactScrollEdgeAppearance = appearance;
                 }
             };
             
@@ -53,6 +59,9 @@
             
             OverrideImplementation([UIToolbar class], @selector(barTintColor), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIColor *(UIToolbar *selfObject) {
+                    if (@available(iOS 26.0, *)) {
+                        if (!QMUICMIActivated) { UIColor *(*origin)(id, SEL) = (UIColor *(*)(id, SEL))originalIMPProvider(); return origin(selfObject, originCMD); }
+                    }
                     return selfObject.standardAppearance.backgroundColor;
                 };
             });
@@ -73,6 +82,9 @@
             
             OverrideImplementation([UIToolbar class], @selector(backgroundImageForToolbarPosition:barMetrics:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIImage *(UIToolbar *selfObject, UIBarPosition firstArgv, UIBarMetrics secondArgv) {
+                    if (@available(iOS 26.0, *)) {
+                        if (!QMUICMIActivated) { UIImage *(*origin)(id, SEL, UIBarPosition, UIBarMetrics) = (UIImage *(*)(id, SEL, UIBarPosition, UIBarMetrics))originalIMPProvider(); return origin(selfObject, originCMD, firstArgv, secondArgv); }
+                    }
                     return selfObject.standardAppearance.backgroundImage;
                 };
             });

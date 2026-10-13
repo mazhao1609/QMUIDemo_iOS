@@ -31,28 +31,30 @@ const CGSize SizeForStaticSizeView = {140, 60};
     [self.view addSubview:self.scrollView];
     
     ({
-        [self generateLabelWithTitle:@"sizeToFit，无 insets"];
+        [self generateLabelWithTitle:@"sizeToFit，无内边距"];
         [self generateSystemButton];
         [self generateQMUIButton];
     });
     
     ({
-        [self generateLabelWithTitle:@"sizeToFit\ncontentEdgeInsets(0, 8, 0, 8)\nimageEdgeInsets(0, 8, 0, 8)\ntitleEdgeInsets(0, 8, 0, 8)"];
+        [self generateLabelWithTitle:@"sizeToFit\n左右内边距 8，图文间距 16\nUIButtonConfiguration / QMUIButton"];
         UIButton *systemButton = [self generateSystemButton];
-        systemButton.contentEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
-        systemButton.imageEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
-        systemButton.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
+        UIButtonConfiguration *configuration = systemButton.configuration;
+        configuration.contentInsets = NSDirectionalEdgeInsetsMake(0, 8, 0, 8);
+        configuration.imagePadding = 16;
+        systemButton.configuration = configuration;
         QMUIButton *qmuiButton = [self generateQMUIButton];
         [self copyButtonPropertyFromButton:systemButton toButton:qmuiButton];
     });
     
     ({
-        [self generateLabelWithTitle:@"固定宽高\ncontentEdgeInsets(0, 8, 0, 8)\nimageEdgeInsets(0, 8, 0, 8)\ntitleEdgeInsets(0, 8, 0, 8)"];
+        [self generateLabelWithTitle:@"固定宽高\n左右内边距 8，图文间距 16\nUIButtonConfiguration / QMUIButton"];
         UIButton *systemButton = [self generateSystemButton];
         systemButton.tag = TagForStaticSizeView;
-        systemButton.contentEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
-        systemButton.imageEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
-        systemButton.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
+        UIButtonConfiguration *configuration = systemButton.configuration;
+        configuration.contentInsets = NSDirectionalEdgeInsetsMake(0, 8, 0, 8);
+        configuration.imagePadding = 16;
+        systemButton.configuration = configuration;
         QMUIButton *qmuiButton = [self generateQMUIButton];
         [self copyButtonPropertyFromButton:systemButton toButton:qmuiButton];
     });
@@ -71,15 +73,33 @@ const CGSize SizeForStaticSizeView = {140, 60};
 
 - (__kindof UIButton *)generateButtonWithClass:(Class)buttonClass {
     UIButton *button = [[buttonClass alloc] init];
-    [button setTitle:@"短标题" forState:UIControlStateNormal];
-    [button setImage:[UIImage qmui_imageWithColor:UIColorBlue size:CGSizeMake(20, 20) cornerRadius:0] forState:UIControlStateNormal];
+    UIImage *image = [UIImage qmui_imageWithColor:UIColorBlue size:CGSizeMake(20, 20) cornerRadius:0];
+    if ([button isKindOfClass:QMUIButton.class]) {
+        [button setTitle:@"短标题" forState:UIControlStateNormal];
+        [button setImage:image forState:UIControlStateNormal];
+        [button setTitleColor:UIColorWhite forState:UIControlStateNormal];
+        button.titleLabel.font = UIFontMake(18);
+    }
     button.backgroundColor = UIColorTestRed;
     button.imageView.layer.borderWidth = PixelOne;
     button.imageView.layer.borderColor = UIColorTestBlue.CGColor;
-    [button setTitleColor:UIColorWhite forState:UIControlStateNormal];
-    button.titleLabel.font = UIFontMake(18);
     button.titleLabel.layer.borderWidth = PixelOne;
     button.titleLabel.layer.borderColor = UIColorRed.CGColor;
+    if (![button isKindOfClass:QMUIButton.class]) {
+        // 系统按钮使用现代配置；QMUIButton 继续使用自定义布局以支持副标题等能力。
+        UIButtonConfiguration *configuration = UIButtonConfiguration.plainButtonConfiguration;
+        configuration.contentInsets = NSDirectionalEdgeInsetsZero;
+        configuration.imagePadding = 0;
+        configuration.title = @"短标题";
+        configuration.image = image;
+        configuration.baseForegroundColor = UIColorWhite;
+        configuration.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey, id> *(NSDictionary<NSAttributedStringKey, id> *attributes) {
+            NSMutableDictionary *result = attributes.mutableCopy;
+            result[NSFontAttributeName] = UIFontMake(18);
+            return result;
+        };
+        button.configuration = configuration;
+    }
     [button addTarget:self action:@selector(handleButtonEvent:) forControlEvents:UIControlEventTouchUpInside];
     [self.scrollView addSubview:button];
     if ([button isKindOfClass:QMUIButton.class]) {
@@ -92,15 +112,13 @@ const CGSize SizeForStaticSizeView = {140, 60};
     return button;
 }
 
-- (void)copyButtonPropertyFromButton:(UIButton *)fromButton toButton:(UIButton *)toButton {
+- (void)copyButtonPropertyFromButton:(UIButton *)fromButton toButton:(QMUIButton *)toButton {
     toButton.tag = fromButton.tag;
-    toButton.contentEdgeInsets = fromButton.contentEdgeInsets;
-    toButton.imageEdgeInsets = fromButton.imageEdgeInsets;
-    toButton.titleEdgeInsets = fromButton.titleEdgeInsets;
-    if ([toButton isKindOfClass:QMUIButton.class]) {
-        QMUIButton *b = (QMUIButton *)toButton;
-        b.subtitleEdgeInsets = fromButton.titleEdgeInsets;
-    }
+    // 将系统配置映射到 QMUI 的布局属性，不再读写 UIButton 的弃用内边距。
+    NSDirectionalEdgeInsets insets = fromButton.configuration.contentInsets;
+    BOOL isRTL = fromButton.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+    toButton.qmui_contentInsets = UIEdgeInsetsMake(insets.top, isRTL ? insets.trailing : insets.leading, insets.bottom, isRTL ? insets.leading : insets.trailing);
+    toButton.spacingBetweenImageAndTitle = fromButton.configuration.imagePadding;
 }
 
 - (UILabel *)generateLabelWithTitle:(NSString *)title {
@@ -336,12 +354,15 @@ const CGSize SizeForStaticSizeView = {140, 60};
 
 - (void)setBindButton:(UIButton *)bindButton {
     _bindButton = bindButton;
-    _shouldShowImageSwitch.on = !!bindButton.currentImage;
-    _shouldShowTitleSwitch.on = !!bindButton.currentTitle;
+    // 配置按钮直接读取 configuration，避免与旧 state 存储的图片、标题不同步。
+    UIImage *image = bindButton.configuration ? bindButton.configuration.image : bindButton.currentImage;
+    NSString *title = bindButton.configuration ? bindButton.configuration.title : bindButton.currentTitle;
+    _shouldShowImageSwitch.on = !!image;
+    _shouldShowTitleSwitch.on = !!title;
     _shouldShowSubtitleSwitch.enabled = [bindButton isKindOfClass:QMUIButton.class];
     _shouldShowSubtitleSwitch.on = _shouldShowSubtitleSwitch.enabled && ((QMUIButton *)bindButton).subtitle.length;
-    _bigImageSwitch.on = bindButton.currentImage.size.width >= 80;
-    _longTitleSwitch.on = bindButton.currentTitle.length >= 20;
+    _bigImageSwitch.on = image.size.width >= 80;
+    _longTitleSwitch.on = title.length >= 20;
     _imagePositionSegmented.enabled = [bindButton isKindOfClass:[QMUIButton class]];
     _imagePositionSegmented.selectedSegmentIndex = [bindButton isKindOfClass:[QMUIButton class]] ? ((QMUIButton *)bindButton).imagePosition : -1;
     _horizontalAlignmentSegmented.selectedSegmentIndex = bindButton.contentHorizontalAlignment;
@@ -377,21 +398,26 @@ const CGSize SizeForStaticSizeView = {140, 60};
 }
 
 - (void)updateImageForButton:(UIButton *)button shouldShowImage:(BOOL)shouldShowImage shouldShowBigImage:(BOOL)shouldShowBigImage {
-    if (!shouldShowImage) {
-        [button setImage:nil forState:UIControlStateNormal];
-    } else {
-        UIImage *image = [UIImage qmui_imageWithColor:UIColorBlue size:shouldShowBigImage ? CGSizeMake(80, 80) : CGSizeMake(20, 20) cornerRadius:0];
-        [button setImage:image forState:UIControlStateNormal];
+    UIImage *image = shouldShowImage ? [UIImage qmui_imageWithColor:UIColorBlue size:shouldShowBigImage ? CGSizeMake(80, 80) : CGSizeMake(20, 20) cornerRadius:0] : nil;
+    if (button.configuration) {
+        // 更新配置对象后重新赋值，让 UIKit 同步刷新图片。
+        UIButtonConfiguration *configuration = button.configuration;
+        configuration.image = image;
+        button.configuration = configuration;
+        return;
     }
+    [button setImage:image forState:UIControlStateNormal];
 }
 
 - (void)updateTitleForButton:(UIButton *)button shouldShowTitle:(BOOL)shouldShowTitle shouldShowLongTitle:(BOOL)shouldShowLongTitle {
-    if (!shouldShowTitle) {
-        [button setTitle:nil forState:UIControlStateNormal];
-    } else {
-        NSString *title = shouldShowLongTitle ? @"很长很长的标题很长很长的标题很长很长的标题" : @"短标题";
-        [button setTitle:title forState:UIControlStateNormal];
+    NSString *title = shouldShowTitle ? (shouldShowLongTitle ? @"很长很长的标题很长很长的标题很长很长的标题" : @"短标题") : nil;
+    if (button.configuration) {
+        UIButtonConfiguration *configuration = button.configuration;
+        configuration.title = title;
+        button.configuration = configuration;
+        return;
     }
+    [button setTitle:title forState:UIControlStateNormal];
 }
 
 - (void)updateSubtitleForButton:(QMUIButton *)button shouldShowSubtitle:(BOOL)shouldShowSubtitle shouldShowLongTitle:(BOOL)shouldShowLongTitle {

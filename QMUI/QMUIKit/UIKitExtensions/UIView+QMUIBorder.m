@@ -263,8 +263,8 @@ static char kAssociatedObjectKey_dashPattern;
         CGFloat cornerRadius = view.layer.qmui_originCornerRadius;
         CGFloat radius = cornerRadius - lineOffset;
         
-        if (view.layer.qmui_maskedCorners) {
-            if ((view.layer.qmui_maskedCorners & QMUILayerMinXMinYCorner) == QMUILayerMinXMinYCorner) {
+        if (view.layer.maskedCorners) {
+            if ((view.layer.maskedCorners & kCALayerMinXMinYCorner) == kCALayerMinXMinYCorner) {
                 [topPath addArcWithCenter:CGPointMake(cornerRadius + borderInsets.left + (shouldShowLeftBorder ? verticalInset : 0), cornerRadius + verticalInset) radius:radius startAngle:1.25 * M_PI endAngle:1.5 * M_PI clockwise:YES];
                 [topPath addLineToPoint:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - borderInsets.right - (shouldShowRightBorder ? verticalInset : 0), lineOffset + verticalInset)];
                 [leftPath addArcWithCenter:CGPointMake(cornerRadius + verticalInset, cornerRadius + borderInsets.right + (shouldShowTopBorder ? verticalInset : 0)) radius:radius startAngle:-0.75 * M_PI endAngle:-1 * M_PI clockwise:NO];
@@ -275,7 +275,7 @@ static char kAssociatedObjectKey_dashPattern;
                 [leftPath moveToPoint:CGPointMake(points[@"leftpath"][0].CGPointValue.x, points[@"leftpath"][0].CGPointValue.y - cornerRadius)];
                 [leftPath addLineToPoint:points[@"leftpath"][1].CGPointValue];
             }
-            if ((view.layer.qmui_maskedCorners & QMUILayerMinXMaxYCorner) == QMUILayerMinXMaxYCorner) {
+            if ((view.layer.maskedCorners & kCALayerMinXMaxYCorner) == kCALayerMinXMaxYCorner) {
                 [leftPath addArcWithCenter:CGPointMake(cornerRadius + verticalInset, CGRectGetHeight(self.bounds) - cornerRadius - borderInsets.left - (shouldShowBottomBorder ? verticalInset : 0)) radius:radius startAngle:-1 * M_PI endAngle:-1.25 * M_PI clockwise:NO];
                 [bottomPath addArcWithCenter:CGPointMake(cornerRadius + borderInsets.right + (shouldShowLeftBorder ? verticalInset : 0), CGRectGetHeight(self.bounds) - cornerRadius - verticalInset) radius:radius startAngle:-1.25 * M_PI endAngle:-1.5 * M_PI clockwise:NO];
                 [bottomPath addLineToPoint:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - borderInsets.left - (shouldShowRightBorder ? verticalInset : 0), CGRectGetHeight(self.bounds) - lineOffset - verticalInset)];
@@ -285,7 +285,7 @@ static char kAssociatedObjectKey_dashPattern;
                 [bottomPath moveToPoint:points[@"bottompath"][1].CGPointValue];
                 [bottomPath addLineToPoint:CGPointMake(points[@"bottompath"][0].CGPointValue.x - cornerRadius, points[@"bottompath"][0].CGPointValue.y)];
             }
-            if ((view.layer.qmui_maskedCorners & QMUILayerMaxXMaxYCorner) == QMUILayerMaxXMaxYCorner) {
+            if ((view.layer.maskedCorners & kCALayerMaxXMaxYCorner) == kCALayerMaxXMaxYCorner) {
                 [bottomPath addArcWithCenter:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - borderInsets.left - (shouldShowRightBorder ? verticalInset : 0), CGRectGetHeight(self.bounds) - cornerRadius - verticalInset) radius:radius startAngle:-1.5 * M_PI endAngle:-1.75 * M_PI clockwise:NO];
                 [rightPath addArcWithCenter:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - verticalInset, CGRectGetHeight(self.bounds) - cornerRadius - borderInsets.right - (shouldShowBottomBorder ? verticalInset : 0)) radius:radius startAngle:-1.75 * M_PI endAngle:-2 * M_PI clockwise:NO];
                 [rightPath addLineToPoint:CGPointMake(CGRectGetWidth(self.bounds) - lineOffset - verticalInset, cornerRadius + borderInsets.left + (shouldShowTopBorder ? verticalInset : 0))];
@@ -294,7 +294,7 @@ static char kAssociatedObjectKey_dashPattern;
                 [rightPath moveToPoint:points[@"rightpath"][1].CGPointValue];
                 [rightPath addLineToPoint:CGPointMake(points[@"rightpath"][0].CGPointValue.x, points[@"rightpath"][0].CGPointValue.y + cornerRadius)];
             }
-            if ((view.layer.qmui_maskedCorners & QMUILayerMaxXMinYCorner) == QMUILayerMaxXMinYCorner) {
+            if ((view.layer.maskedCorners & kCALayerMaxXMinYCorner) == kCALayerMaxXMinYCorner) {
                 [rightPath addArcWithCenter:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - verticalInset, cornerRadius + borderInsets.left + (shouldShowTopBorder ? verticalInset : 0)) radius:radius startAngle:0 * M_PI endAngle:-0.25 * M_PI clockwise:NO];
                 [topPath addArcWithCenter:CGPointMake(CGRectGetWidth(self.bounds) - cornerRadius - borderInsets.right - (shouldShowRightBorder ? verticalInset : 0), cornerRadius + verticalInset) radius:radius startAngle:1.5 * M_PI endAngle:1.75 * M_PI clockwise:YES];
             } else {

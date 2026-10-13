@@ -137,7 +137,7 @@
 
 - (void)handleChangeAlignmentEvent:(id)sender {
     BOOL verticalAlignment = !self.emotionInputManager.emotionView.verticalAlignment;
-    self.emotionInputManager.emotionView.deleteButton.contentEdgeInsets = verticalAlignment ? UIEdgeInsetsMake(0, 20, 0, 20) : UIEdgeInsetsZero;
+    self.emotionInputManager.emotionView.deleteButton.qmui_contentInsets = verticalAlignment ? UIEdgeInsetsMake(0, 20, 0, 20) : UIEdgeInsetsZero;
     self.emotionInputManager.emotionView.deleteButtonBackgroundColor = verticalAlignment ? UIColorBlue : nil;
     self.emotionInputManager.emotionView.deleteButtonImage = verticalAlignment ? [[QMUIHelper imageWithName:@"QMUI_emotion_delete"] qmui_imageWithTintColor:UIColor.whiteColor] : [QMUIHelper imageWithName:@"QMUI_emotion_delete"];
     self.emotionInputManager.emotionView.verticalAlignment = verticalAlignment;

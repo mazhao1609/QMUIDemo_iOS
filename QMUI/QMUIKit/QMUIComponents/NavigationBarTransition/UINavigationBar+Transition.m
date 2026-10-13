@@ -51,7 +51,7 @@
                     originSelectorIMP(selfObject, originCMD, appearance);
                     
                     if (selfObject.qmuinb_copyStylesToBar) {
-                        selfObject.qmuinb_copyStylesToBar.standardAppearance = appearance;
+                        selfObject.qmuinb_copyStylesToBar.scrollEdgeAppearance = appearance;
                     }
                 };
             });

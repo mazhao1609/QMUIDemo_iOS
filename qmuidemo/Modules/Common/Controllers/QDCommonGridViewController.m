@@ -115,7 +115,7 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.contentEdgeInsets = UIEdgeInsetsMake(0, 10, 0, 10);
+        self.qmui_contentInsets = UIEdgeInsetsMake(0, 10, 0, 10);
         self.imageView.contentMode = UIViewContentModeCenter;
         self.titleLabel.numberOfLines = 2;
         self.highlightedBackgroundColor = TableViewCellSelectedBackgroundColor;
@@ -132,12 +132,12 @@
         return;
     }
     
-    CGSize contentSize = CGSizeMake(CGRectGetWidth(self.bounds) - UIEdgeInsetsGetHorizontalValue(self.contentEdgeInsets), CGRectGetHeight(self.bounds) - UIEdgeInsetsGetVerticalValue(self.contentEdgeInsets));
-    CGPoint center = CGPointMake(flat(self.contentEdgeInsets.left + contentSize.width / 2), flat(self.contentEdgeInsets.top + contentSize.height / 2));
+    CGSize contentSize = CGSizeMake(CGRectGetWidth(self.bounds) - UIEdgeInsetsGetHorizontalValue(self.qmui_contentInsets), CGRectGetHeight(self.bounds) - UIEdgeInsetsGetVerticalValue(self.qmui_contentInsets));
+    CGPoint center = CGPointMake(flat(self.qmui_contentInsets.left + contentSize.width / 2), flat(self.qmui_contentInsets.top + contentSize.height / 2));
     
     self.imageView.center = CGPointMake(center.x, center.y - 12);
     
-    self.titleLabel.frame = CGRectFlatMake(self.contentEdgeInsets.left, center.y + 27, contentSize.width, QMUIViewSelfSizingHeight);
+    self.titleLabel.frame = CGRectFlatMake(self.qmui_contentInsets.left, center.y + 27, contentSize.width, QMUIViewSelfSizingHeight);
 }
 
 @end

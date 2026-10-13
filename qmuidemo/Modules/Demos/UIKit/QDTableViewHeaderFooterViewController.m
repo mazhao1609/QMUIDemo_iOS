@@ -92,7 +92,7 @@
         button = [QDUIHelper generateLightBorderedButton];
         [button setTitle:@"Button" forState:UIControlStateNormal];
         button.titleLabel.font = UIFontMake(14);
-        button.contentEdgeInsets = UIEdgeInsetsMake(4, 12, 4, 12);
+        button.qmui_contentInsets = UIEdgeInsetsMake(4, 12, 4, 12);
         [button sizeToFit];
         button.qmui_automaticallyAdjustTouchHighlightedInScrollView = YES;
         button.qmui_outsideEdge = UIEdgeInsetsMake(-8, -8, -8, -8);

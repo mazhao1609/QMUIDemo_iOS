@@ -21,36 +21,93 @@
 #import "CALayer+QMUI.h"
 #import "NSShadow+QMUI.h"
 
-@interface UISlider ()
+// 只记录 QMUI 生成的导轨图片，业务设置的图片不会被覆盖或恢复成错误的值。
+@interface QMUISliderTrackImageState : NSObject
+@property(nonatomic, strong) UIImage *minimumImage;
+@property(nonatomic, strong) UIImage *maximumImage;
+@property(nonatomic, strong) UIColor *minimumColor;
+@property(nonatomic, strong) UIColor *maximumColor;
+@property(nonatomic, assign) CGFloat minimumHeight;
+@property(nonatomic, assign) CGFloat maximumHeight;
+@property(nonatomic, assign) CGFloat minimumScale;
+@property(nonatomic, assign) CGFloat maximumScale;
+@property(nonatomic, assign) BOOL updating;
+@end
+
+@implementation QMUISliderTrackImageState
+@end
+
+/// 仅裁剪已启用自定义高度的 Steps 导轨，保留 UIKit 已有的 mask。
+@interface QMUISliderTrackClipLayer : CAShapeLayer
+@property(nonatomic, weak) UIImageView *imageView;
+@end
+
+@implementation QMUISliderTrackClipLayer
+@end
+
+@interface UISlider (QMUI_Steps_Private)
 
 @property(nonatomic, strong) NSMutableArray<QMUISliderStepControl *> *qmuisl_stepControls;
-@property(nonatomic, copy) NSString *qmuisl_layoutCachedKey;
 @property(nonatomic, assign) NSUInteger qmuisl_precedingStep;
+@property(nonatomic, strong) QMUISliderTrackImageState *qmuisl_trackImageState;
+@property(nonatomic, strong) NSArray<QMUISliderTrackClipLayer *> *qmuisl_trackClipLayers;
+@property(nonatomic, weak) UIView *qmuisl_shadowedThumbView;
+- (float)qmuisl_valueForStep:(NSUInteger)step;
+- (void)qmuisl_snapToStep;
+- (void)qmuisl_swizzleLayoutIfNeeded;
+- (void)qmuisl_updateTrackImagesIfNeeded;
+- (void)qmuisl_clearGeneratedTrackImageForMinimumTrack:(BOOL)minimumTrack;
+- (void)qmuisl_updateTrackClippingIfNeeded;
+- (void)qmuisl_updateThumbShadow;
 @end
 
 @implementation UISlider (QMUI)
 
 QMUISynthesizeIdStrongProperty(qmuisl_stepControls, setQmuisl_stepControls)
-QMUISynthesizeIdCopyProperty(qmuisl_layoutCachedKey, setQmuisl_layoutCachedKey)
 QMUISynthesizeNSUIntegerProperty(qmuisl_precedingStep, setQmuisl_precedingStep)
 QMUISynthesizeIdCopyProperty(qmui_stepDidChangeBlock, setQmui_stepDidChangeBlock)
+QMUISynthesizeIdStrongProperty(qmuisl_trackImageState, setQmuisl_trackImageState)
+QMUISynthesizeIdStrongProperty(qmuisl_trackClipLayers, setQmuisl_trackClipLayers)
+QMUISynthesizeIdWeakProperty(qmuisl_shadowedThumbView, setQmuisl_shadowedThumbView)
 
 - (UIView *)qmui_thumbView {
-    // thumbView 并非在一开始就存在，而是在某个时机才生成的。如果使用了自己的 thumbImage，则系统用 _thumbView 来显示。如果没用自己的 thumbImage，则系统用 _innerThumbView 来存放。注意如果是 _innerThumbView，它外部还有一个 _thumbViewNeue 用来控制布局。
-    UIView *slider = self;
-    if (@available(iOS 14.0, *)) {
-        slider = [self qmui_valueForKey:@"_visualElement"];
+    // 从真实视图树查询滑块，不依赖 visualElement 的私有属性。
+    UIImage *thumbImage = self.currentThumbImage;
+    CGRect track = [self trackRectForBounds:self.bounds];
+    CGRect thumb = [self thumbRectForBounds:self.bounds trackRect:track value:self.value];
+    UIView *thumbView = nil;
+    NSMutableArray<UIView *> *views = self.subviews.mutableCopy;
+    for (NSUInteger index = 0; index < views.count; index++) {
+        UIView *view = views[index];
+        if ([view isKindOfClass:UIImageView.class] && thumbImage) {
+            UIImageView *imageView = (UIImageView *)view;
+            UIImage *image = imageView.highlighted && imageView.highlightedImage ? imageView.highlightedImage : imageView.image;
+            CGRect rect = [imageView convertRect:imageView.bounds toView:self];
+            // iOS 26 自定义圆点使用 UISliderImageView，名称不含 Thumb；按图片及实际圆点位置识别。
+            if ([image isEqual:thumbImage]
+                && fabs(CGRectGetMidX(rect) - CGRectGetMidX(thumb)) < 1
+                && fabs(CGRectGetMidY(rect) - CGRectGetMidY(thumb)) < 1) return imageView;
+        }
+        NSString *name = NSStringFromClass(view.class);
+        if ([name localizedCaseInsensitiveContainsString:@"Thumb"]) {
+            thumbView = view;
+            if ([name localizedCaseInsensitiveContainsString:@"InnerThumb"]) return view;
+        }
+        [views addObjectsFromArray:view.subviews];
     }
-    if (!slider) return nil;
-
-    UIView *thumbView = [slider qmui_valueForKey:@"thumbView"] ?: [slider qmui_valueForKey:@"innerThumbView"];
     return thumbView;
 }
 
 static char kAssociatedObjectKey_trackHeight;
 - (void)setQmui_trackHeight:(CGFloat)trackHeight {
+    trackHeight = isfinite(trackHeight) ? MAX(0, trackHeight) : 0;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_trackHeight, @(trackHeight), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (trackHeight <= 0) return;
+    if (trackHeight <= 0) {
+        [self qmuisl_clearGeneratedTrackImageForMinimumTrack:YES];
+        [self qmuisl_clearGeneratedTrackImageForMinimumTrack:NO];
+        [self qmuisl_setNeedsLayout];
+        return;
+    }
     
     [QMUIHelper executeBlock:^{
         OverrideImplementation([UISlider class], @selector(trackRectForBounds:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
@@ -62,20 +119,187 @@ static char kAssociatedObjectKey_trackHeight;
                 CGRect result = originSelectorIMP(selfObject, originCMD, bounds);
                 
                 if (selfObject.qmui_trackHeight > 0) {
-                    result = CGRectSetHeight(result, selfObject.qmui_trackHeight);
-                    result = CGRectSetY(result, CGFloatGetCenter(CGRectGetHeight(bounds), CGRectGetHeight(result)));
+                    // 保留系统导轨的中心线，不将半像素高度的上下边分别取整。
+                    CGFloat height = selfObject.qmui_trackHeight;
+                    result = CGRectMake(result.origin.x, CGRectGetMidY(result) - height / 2, result.size.width, height);
                 }
                 
                 return result;
             };
         });
+
+        for (NSNumber *minimumTrack in @[@YES, @NO]) {
+            BOOL isMinimum = minimumTrack.boolValue;
+            SEL selector = isMinimum ? @selector(setMinimumTrackImage:forState:) : @selector(setMaximumTrackImage:forState:);
+            OverrideImplementation(UISlider.class, selector, ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+                return ^(UISlider *selfObject, UIImage *image, UIControlState state) {
+                    // 外部设置自定义图片时，先移除 QMUI 的其他状态图片，避免拖动时切回旧图。
+                    if (!selfObject.qmuisl_trackImageState.updating) {
+                        [selfObject qmuisl_clearGeneratedTrackImageForMinimumTrack:isMinimum];
+                    }
+                    void (*originSelectorIMP)(id, SEL, UIImage *, UIControlState);
+                    originSelectorIMP = (void (*)(id, SEL, UIImage *, UIControlState))originalIMPProvider();
+                    originSelectorIMP(selfObject, originCMD, image, state);
+                };
+            });
+        }
     } oncePerIdentifier:@"UISlider (QMUI) trackHeight"];
-    
-    [self setNeedsLayout];
+
+    [self qmuisl_swizzleLayoutIfNeeded];
+    [self qmuisl_updateTrackImagesIfNeeded];
+    [self qmuisl_setNeedsLayout];
 }
 
 - (CGFloat)qmui_trackHeight {
     return [((NSNumber *)objc_getAssociatedObject(self, &kAssociatedObjectKey_trackHeight)) qmui_CGFloatValue];
+}
+
+- (void)qmuisl_clearGeneratedTrackImageForMinimumTrack:(BOOL)minimumTrack {
+    QMUISliderTrackImageState *imageState = self.qmuisl_trackImageState;
+    UIImage *generatedImage = minimumTrack ? imageState.minimumImage : imageState.maximumImage;
+    if (!generatedImage) return;
+    imageState.updating = YES;
+    for (NSNumber *stateNumber in @[@(UIControlStateNormal), @(UIControlStateHighlighted), @(UIControlStateDisabled)]) {
+        UIControlState state = stateNumber.unsignedIntegerValue;
+        UIImage *image = minimumTrack ? [self minimumTrackImageForState:state] : [self maximumTrackImageForState:state];
+        if (image != generatedImage) continue;
+        if (minimumTrack) [self setMinimumTrackImage:nil forState:state];
+        else [self setMaximumTrackImage:nil forState:state];
+    }
+    if (minimumTrack) imageState.minimumImage = nil;
+    else imageState.maximumImage = nil;
+    imageState.updating = NO;
+}
+
+- (void)qmuisl_updateTrackImagesIfNeeded {
+    CGFloat height = self.qmui_trackHeight;
+    if (height <= 0 || !isfinite(height)) return;
+    // iOS 26 的玻璃导轨会随交互改变厚度；自定义高度通过公开图片 API 固定，默认控件不介入。
+    if (!self.qmuisl_trackImageState) self.qmuisl_trackImageState = QMUISliderTrackImageState.new;
+    QMUISliderTrackImageState *imageState = self.qmuisl_trackImageState;
+    if (imageState.updating) return;
+    CGFloat scale = self.window.screen.scale ?: self.traitCollection.displayScale;
+    if (scale <= 0) scale = 1;
+    height = MAX(1, round(height * scale)) / scale;
+    NSArray<NSNumber *> *states = @[@(UIControlStateNormal), @(UIControlStateHighlighted), @(UIControlStateDisabled)];
+    for (NSNumber *track in @[@YES, @NO]) {
+        BOOL minimumTrack = track.boolValue;
+        UIImage *generatedImage = minimumTrack ? imageState.minimumImage : imageState.maximumImage;
+        BOOL hasCustomImage = NO;
+        BOOL allStatesMatch = generatedImage != nil;
+        for (NSNumber *stateNumber in states) {
+            UIControlState state = stateNumber.unsignedIntegerValue;
+            UIImage *image = minimumTrack ? [self minimumTrackImageForState:state] : [self maximumTrackImageForState:state];
+            if (image && image != generatedImage) hasCustomImage = YES;
+            if (image != generatedImage) allStatesMatch = NO;
+        }
+        if (hasCustomImage) continue;
+        UIColor *color = minimumTrack ? (self.minimumTrackTintColor ?: self.tintColor) : (self.maximumTrackTintColor ?: UIColor.systemGray3Color);
+        color = [color resolvedColorWithTraitCollection:self.traitCollection];
+        UIColor *cachedColor = minimumTrack ? imageState.minimumColor : imageState.maximumColor;
+        CGFloat cachedHeight = minimumTrack ? imageState.minimumHeight : imageState.maximumHeight;
+        CGFloat cachedScale = minimumTrack ? imageState.minimumScale : imageState.maximumScale;
+        if (allStatesMatch && [color isEqual:cachedColor] && height == cachedHeight && scale == cachedScale) continue;
+        // 两侧各留一个像素帽，中间一个像素拉伸；高亮和普通状态使用同一张图，不再变细。
+        UIImage *image = [UIImage qmui_imageWithSize:CGSizeMake(3 / scale, height) opaque:NO scale:scale actions:^(CGContextRef context) {
+            CGContextSetFillColorWithColor(context, color.CGColor);
+            CGContextFillRect(context, CGRectMake(0, 0, 3 / scale, height));
+        }];
+        image = [image resizableImageWithCapInsets:UIEdgeInsetsMake(0, 1 / scale, 0, 1 / scale) resizingMode:UIImageResizingModeStretch];
+        if (!image) continue;
+        imageState.updating = YES;
+        for (NSNumber *stateNumber in states) {
+            UIControlState state = stateNumber.unsignedIntegerValue;
+            if (minimumTrack) [self setMinimumTrackImage:image forState:state];
+            else [self setMaximumTrackImage:image forState:state];
+        }
+        imageState.updating = NO;
+        if (minimumTrack) {
+            imageState.minimumImage = image;
+            imageState.minimumColor = color;
+            imageState.minimumHeight = height;
+            imageState.minimumScale = scale;
+        } else {
+            imageState.maximumImage = image;
+            imageState.maximumColor = color;
+            imageState.maximumHeight = height;
+            imageState.maximumScale = scale;
+        }
+    }
+}
+
+- (void)qmuisl_swizzleLayoutIfNeeded {
+    [QMUIHelper executeBlock:^{
+        OverrideImplementation(UISlider.class, @selector(layoutSubviews), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+            return ^(UISlider *selfObject) {
+                [selfObject qmuisl_updateTrackImagesIfNeeded];
+                void (*originSelectorIMP)(id, SEL);
+                originSelectorIMP = (void (*)(id, SEL))originalIMPProvider();
+                originSelectorIMP(selfObject, originCMD);
+                [selfObject qmuisl_updateTrackClippingIfNeeded];
+                [selfObject qmuisl_updateThumbShadow];
+                [selfObject qmuisl_layoutStepControls];
+            };
+        });
+    } oncePerIdentifier:@"UISlider (QMUI) layout"];
+}
+
+- (void)qmuisl_updateTrackClippingIfNeeded {
+    if (!self.qmuisl_trackClipLayers.count && (self.qmui_trackHeight <= 0 || self.qmui_numberOfSteps < 2)) return;
+    NSMutableArray<QMUISliderTrackClipLayer *> *activeLayers = NSMutableArray.new;
+    if (@available(iOS 26.0, *)) {
+        if (self.qmui_trackHeight > 0 && self.qmui_numberOfSteps >= 2 && !CGRectIsEmpty(self.bounds)) {
+            CGRect track = [self trackRectForBounds:self.bounds];
+            CGRect first = [self thumbRectForBounds:self.bounds trackRect:track value:self.minimumValue];
+            CGRect last = [self thumbRectForBounds:self.bounds trackRect:track value:self.maximumValue];
+            CGFloat left = MIN(CGRectGetMidX(first), CGRectGetMidX(last));
+            CGFloat right = MAX(CGRectGetMidX(first), CGRectGetMidX(last));
+            CGRect clipRect = CGRectMake(left, CGRectGetMinY(self.bounds), MAX(0, right - left), CGRectGetHeight(self.bounds));
+            UIImage *minimumImage = self.currentMinimumTrackImage;
+            UIImage *maximumImage = self.currentMaximumTrackImage;
+            UIView *thumbView = self.qmui_thumbView;
+            NSMutableArray<UIView *> *views = self.subviews.mutableCopy;
+            for (NSUInteger index = 0; index < views.count; index++) {
+                UIView *view = views[index];
+                if ([view isKindOfClass:UIImageView.class]) {
+                    UIImageView *imageView = (UIImageView *)view;
+                    UIImage *image = imageView.highlighted && imageView.highlightedImage ? imageView.highlightedImage : imageView.image;
+                    if (imageView != thumbView && image && ([image isEqual:minimumImage] || [image isEqual:maximumImage])) {
+                        QMUISliderTrackClipLayer *clip = nil;
+                        for (QMUISliderTrackClipLayer *layer in self.qmuisl_trackClipLayers) {
+                            if (layer.imageView == imageView) { clip = layer; break; }
+                        }
+                        if (!clip) {
+                            clip = QMUISliderTrackClipLayer.layer;
+                            clip.imageView = imageView;
+                        }
+                        // 不改变原生轨道/圆点的坐标；普通、高亮和 RTL 状态使用同一裁剪边界。
+                        [CALayer qmui_performWithoutAnimation:^{
+                            if (imageView.layer.mask != clip) {
+                                clip.mask = imageView.layer.mask;
+                                imageView.layer.mask = clip;
+                            }
+                            clip.frame = imageView.bounds;
+                            CGRect rect = CGRectIntersection(imageView.bounds, [self convertRect:clipRect toView:imageView]);
+                            clip.path = [UIBezierPath bezierPathWithRect:CGRectIsNull(rect) ? CGRectZero : rect].CGPath;
+                        }];
+                        [activeLayers addObject:clip];
+                    }
+                }
+                [views addObjectsFromArray:view.subviews];
+            }
+        }
+    }
+    // 关闭 Steps、自定义高度或更换系统图片后，只清理 QMUI 自己安装的裁剪。
+    for (QMUISliderTrackClipLayer *clip in self.qmuisl_trackClipLayers) {
+        if ([activeLayers containsObject:clip]) continue;
+        if (clip.imageView.layer.mask == clip) {
+            CALayer *originalMask = clip.mask;
+            clip.mask = nil;
+            clip.imageView.layer.mask = originalMask;
+        }
+    }
+    self.qmuisl_trackClipLayers = activeLayers.count ? activeLayers : nil;
 }
 
 static char kAssociatedObjectKey_thumbSize;
@@ -105,71 +329,57 @@ static char kAssociatedObjectKey_thumbColor;
         UIImage *thumbImage = [UIImage qmui_imageWithShape:QMUIImageShapeOval size:self.qmui_thumbSize tintColor:thumbColor];
         [self setThumbImage:thumbImage forState:UIControlStateNormal];
         [self setThumbImage:thumbImage forState:UIControlStateHighlighted];
+        [self qmuisl_updateThumbShadow];
+        [self setNeedsLayout];
     }
 }
 
 static char kAssociatedObjectKey_thumbShadow;
 - (void)setQmui_thumbShadow:(NSShadow *)thumbShadow {
     objc_setAssociatedObject(self, &kAssociatedObjectKey_thumbShadow, thumbShadow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (thumbShadow) {
-        [QMUIHelper executeBlock:^{
-            if (@available(iOS 14.0, *)) {
-                // -[_UISlideriOSVisualElement didAddSubview:]
-                OverrideImplementation(NSClassFromString([NSString qmui_stringByConcat:@"_", @"UISlider", @"iOS", @"VisualElement", nil]), @selector(didAddSubview:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
-                    return ^(UIView *selfObject, UIView *subview) {
-                        
-                        // call super
-                        void (*originSelectorIMP)(id, SEL, UIView *);
-                        originSelectorIMP = (void (*)(id, SEL, UIView *))originalIMPProvider();
-                        originSelectorIMP(selfObject, originCMD, subview);
-                        
-                        UISlider *slider = (UISlider *)selfObject.superview;
-                        if (![slider isKindOfClass:UISlider.class]) return;
-                        UIView *tv = slider.qmui_thumbView;
-                        if (tv) {
-                            tv.layer.qmui_shadow = slider.qmui_thumbShadow;
-                        }
-                    };
-                });
-            } else {
-                OverrideImplementation([UISlider class], @selector(didAddSubview:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
-                    return ^(UISlider *selfObject, UIView *subview) {
-                        
-                        // call super
-                        void (*originSelectorIMP)(id, SEL, UIView *);
-                        originSelectorIMP = (void (*)(id, SEL, UIView *))originalIMPProvider();
-                        originSelectorIMP(selfObject, originCMD, subview);
-                        
-                        UIView *tv = selfObject.qmui_thumbView;
-                        if (tv) {
-                            tv.layer.qmui_shadow = selfObject.qmui_thumbShadow;
-                        }
-                    };
-                });
-            }
-        } oncePerIdentifier:@"UISlider (QMUI) thumbShadow"];
-    }
-    UIView *thumbView = self.qmui_thumbView;
-    if (thumbView) {
-        thumbView.layer.qmui_shadow = thumbShadow;
-    }
+    [self qmuisl_swizzleLayoutIfNeeded];
+    [self qmuisl_updateThumbShadow];
+    [self setNeedsLayout];
 }
 
 - (NSShadow *)qmui_thumbShadow {
     return (NSShadow *)objc_getAssociatedObject(self, &kAssociatedObjectKey_thumbShadow);
 }
 
+- (void)qmuisl_updateThumbShadow {
+    NSShadow *shadow = self.qmui_thumbShadow;
+    UIView *precedingView = self.qmuisl_shadowedThumbView;
+    if (!shadow && !precedingView) return;
+    UIView *thumbView = shadow ? self.qmui_thumbView : nil;
+    [CALayer qmui_performWithoutAnimation:^{
+        if (precedingView != thumbView) precedingView.layer.qmui_shadow = nil;
+        if (thumbView) {
+            // 每次布局在真实圆点上重应用，兼容系统重建视图及业务动态修改阴影颜色。
+            NSShadow *resolvedShadow = shadow.copy;
+            if ([shadow.shadowColor isKindOfClass:UIColor.class]) {
+                resolvedShadow.shadowColor = [(UIColor *)shadow.shadowColor resolvedColorWithTraitCollection:self.traitCollection];
+            }
+            thumbView.layer.qmui_shadow = resolvedShadow;
+        }
+    }];
+    self.qmuisl_shadowedThumbView = thumbView;
+}
+
 #pragma mark - Steps
 
 static char kAssociatedObjectKey_numberOfSteps;
 - (void)setQmui_numberOfSteps:(NSUInteger)numberOfSteps {
+    // 拖动结束不一定再触发 valueChanged，需同时处理松手和取消事件。
+    UIControlEvents stepEvents = UIControlEventValueChanged | UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel;
     objc_setAssociatedObject(self, &kAssociatedObjectKey_numberOfSteps, @(numberOfSteps), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (numberOfSteps < 2) {
         [self.qmuisl_stepControls enumerateObjectsUsingBlock:^(QMUISliderStepControl * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             [obj removeFromSuperview];
         }];
         self.qmuisl_stepControls = nil;
-        [self removeTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:UIControlEventValueChanged];
+        [self removeTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:stepEvents];
+        [self qmuisl_updateTrackClippingIfNeeded];
+        [self setNeedsLayout];
         return;
     }
     
@@ -191,9 +401,10 @@ static char kAssociatedObjectKey_numberOfSteps;
             [self.qmuisl_stepControls addObject:stepControl];
         }
     } else if (diff > 0) {
-        for (NSInteger i = self.qmuisl_stepControls.count - 1, l = self.qmuisl_stepControls.count - diff - 1; i >= l; i--) {
-            [self.qmuisl_stepControls[i] removeFromSuperview];
-            [self.qmuisl_stepControls removeObjectAtIndex:i];
+        // 减少档位时只移除多余项，避免原来的闭区间多删一个控件。
+        while (self.qmuisl_stepControls.count > numberOfSteps) {
+            [self.qmuisl_stepControls.lastObject removeFromSuperview];
+            [self.qmuisl_stepControls removeLastObject];
         }
     }
     if (self.qmui_stepControlConfiguration) {
@@ -201,10 +412,12 @@ static char kAssociatedObjectKey_numberOfSteps;
             self.qmui_stepControlConfiguration(self, obj, idx);
         }];
     }
+    [self qmuisl_snapToStep];
+    self.qmuisl_precedingStep = self.qmui_step;
     [self qmuisl_setNeedsLayout];
     
-    [self removeTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:UIControlEventValueChanged];
-    [self addTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:UIControlEventValueChanged];
+    [self removeTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:stepEvents];
+    [self addTarget:self action:@selector(qmuisl_handleValueChanged:) forControlEvents:stepEvents];
 }
 
 - (NSUInteger)qmui_numberOfSteps {
@@ -213,8 +426,7 @@ static char kAssociatedObjectKey_numberOfSteps;
 
 - (void)setQmui_step:(NSUInteger)step {
     if (self.qmui_numberOfSteps < 2) return;
-    CGFloat value = (self.maximumValue - self.minimumValue) * ((CGFloat)step / (CGFloat)(self.qmui_numberOfSteps - 1));
-    self.value = value;
+    [self setValue:[self qmuisl_valueForStep:step] animated:NO];
     [self sendActionsForControlEvents:UIControlEventValueChanged];
 }
 
@@ -240,6 +452,7 @@ static char kAssociatedObjectKey_stepControlConfiguration;
 
 - (void)qmuisl_handleValueChanged:(UISlider *)slider {
     if (slider.qmui_numberOfSteps < 2) return;
+    [slider qmuisl_snapToStep];
     
     NSUInteger step = [slider qmuisl_stepWithValue:slider.value];
     if (step != slider.qmuisl_precedingStep) {
@@ -258,25 +471,42 @@ static char kAssociatedObjectKey_stepControlConfiguration;
 }
 
 - (NSUInteger)qmuisl_stepWithValue:(float)value {
-    CGFloat progress = value / (self.maximumValue - self.minimumValue);
+    if (self.qmui_numberOfSteps < 2 || self.maximumValue <= self.minimumValue) return 0;
+    CGFloat progress = (value - self.minimumValue) / (self.maximumValue - self.minimumValue);
+    progress = fmin(fmax(progress, 0), 1);
     NSUInteger step = round(progress * (self.qmui_numberOfSteps - 1));
     return step;
 }
 
+- (float)qmuisl_valueForStep:(NSUInteger)step {
+    if (self.qmui_numberOfSteps < 2) return self.value;
+    step = MIN(step, self.qmui_numberOfSteps - 1);
+    return self.minimumValue + (self.maximumValue - self.minimumValue) * ((CGFloat)step / (self.qmui_numberOfSteps - 1));
+}
+
+- (void)qmuisl_snapToStep {
+    if (self.qmui_numberOfSteps < 2) return;
+    float value = [self qmuisl_valueForStep:self.qmui_step];
+    // 修改真实 value，让 UIKit 同时更新圆点与进度条，不能只修正圆点绘制位置。
+    // 即使数值已归档，结束事件仍需刷新布局，避免进度条保留拖动时的显示状态。
+    [self setValue:value animated:NO];
+    [self setNeedsLayout];
+}
+
 - (void)qmuisl_swizzleForStepsIfNeeded {
+    [self qmuisl_swizzleLayoutIfNeeded];
     [QMUIHelper executeBlock:^{
-        OverrideImplementation([UISlider class], @selector(layoutSubviews), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
-            return ^(UISlider *selfObject) {
-                
-                // call super
-                void (*originSelectorIMP)(id, SEL);
-                originSelectorIMP = (void (*)(id, SEL))originalIMPProvider();
-                originSelectorIMP(selfObject, originCMD);
-                
-                [selfObject qmuisl_layoutStepControls];
+        OverrideImplementation([UISlider class], @selector(sendAction:to:forEvent:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+            return ^(UISlider *selfObject, SEL action, id target, UIEvent *event) {
+                // 新版 UISlider 的触摸更新可能绕过 setValue:animated:，在业务收到事件前统一归档。
+                // setValue 不发送控制事件，保持 continuous 的事件频率及取消事件语义。
+                [selfObject qmuisl_snapToStep];
+                void (*originSelectorIMP)(id, SEL, SEL, id, UIEvent *);
+                originSelectorIMP = (void (*)(id, SEL, SEL, id, UIEvent *))originalIMPProvider();
+                originSelectorIMP(selfObject, originCMD, action, target, event);
             };
         });
-        
+
         OverrideImplementation([UISlider class], @selector(setEnabled:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(UISlider *selfObject, BOOL enabled) {
                 
@@ -336,26 +566,21 @@ static char kAssociatedObjectKey_stepControlConfiguration;
                 // call super
                 CGRect (*originSelectorIMP)(id, SEL, CGRect, CGRect, float);
                 originSelectorIMP = (CGRect (*)(id, SEL, CGRect, CGRect, float))originalIMPProvider();
-                CGRect result = originSelectorIMP(selfObject, originCMD, bounds, trackRect, value);
-
+                // 将归档后的值交给系统计算圆点，避免手动覆盖 x 导致导轨与圆点采用不同坐标。
                 if (selfObject.qmui_numberOfSteps >= 2) {
-                    NSInteger step = [selfObject qmuisl_stepWithValue:value];
-                    CGFloat thumbCenterX = CGRectGetMinX(trackRect) + (CGRectGetWidth(trackRect) / (selfObject.qmui_numberOfSteps - 1)) * step;
-                    result = CGRectSetX(result, thumbCenterX - CGRectGetWidth(result) / 2);
-                    return result;
+                    value = [selfObject qmuisl_valueForStep:[selfObject qmuisl_stepWithValue:value]];
                 }
-                
-                return result;
+                return originSelectorIMP(selfObject, originCMD, bounds, trackRect, value);
             };
         });
         
         OverrideImplementation([UISlider class], @selector(setValue:animated:), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(UISlider *selfObject, float value, BOOL animated) {
                 
-                // 关闭 continuous 本质上只是让系统在 touch 结束时才 send value changed event，实际上不管 continuous 的值是什么，拖动过程中都会不断调用 setValue:animated: 并且实时设置当前的 value，所以需要重写这个方法，在抬手时强制把当前抬手位置的 value 转换成 UI 上 thumView 当前位置对应的 value 值，然后业务才能在 value changed 回调里获取到正确的 value（虽然业务应该获取 step 而不是 value）
+                // 程序设置的值也转换到最近档位；触摸更新另由控制事件归档。
                 if (selfObject.qmui_numberOfSteps >= 2) {
                     NSUInteger step = [selfObject qmuisl_stepWithValue:value];
-                    value = (float)step / (selfObject.qmui_numberOfSteps - 1);
+                    value = [selfObject qmuisl_valueForStep:step];
                 }
                 
                 // call super
@@ -373,34 +598,19 @@ static char kAssociatedObjectKey_stepControlConfiguration;
     NSInteger count = self.qmuisl_stepControls.count;
     if (!count) return;
     
-    // 根据当前 thumbView 的位置，控制重叠的那个 stepControl 的事件响应和显隐，由于 slider 可能是 continuous 的，所以这段逻辑必须每次 layout 都调用，不能放在 layoutCachedKey 的保护里
-    CGRect thumbRect = self.qmui_thumbView.frame;
+    // 使用真实档位判断重叠项，不依赖新版 UISlider 内部圆点视图的层级和坐标。
     CGRect trackRect = [self trackRectForBounds:self.bounds];
-    NSUInteger step = round((CGRectGetMidX(thumbRect) - CGRectGetMinX(trackRect)) / CGRectGetWidth(trackRect) * (count - 1));
+    NSUInteger step = self.qmui_step;
     [self.qmuisl_stepControls enumerateObjectsUsingBlock:^(QMUISliderStepControl * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
         obj.userInteractionEnabled = idx != step;// 让 stepControl 不要影响 thumbView 的事件
         obj.indicator.hidden = idx == step;
     }];
     
-    NSString *layoutCachedKey = [NSString stringWithFormat:@"%.0f-%@", CGRectGetWidth(trackRect), @(count)];
-    if ([self.qmuisl_layoutCachedKey isEqualToString:layoutCachedKey]) return;
-    
-    __block CGFloat totalStepsWidth = 0;
     [self.qmuisl_stepControls enumerateObjectsUsingBlock:^(QMUISliderStepControl * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        totalStepsWidth += obj.indicatorSize.width;
-    }];
-    CGFloat stepMargin = (CGRectGetWidth(trackRect) - totalStepsWidth) / (count - 1);
-    __block CGFloat stepIndicatorMinX = CGRectGetMinX(trackRect);
-    [self.qmuisl_stepControls enumerateObjectsUsingBlock:^(QMUISliderStepControl * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        if (idx == count - 1) {
-            // 因为布局过程中可能存在一些像素不对齐的情况，因此对最后一个 indicator 做保护，一定贴着 slider 的 maxX
-            stepIndicatorMinX = CGRectGetMaxX(trackRect) - obj.indicatorSize.width;
-        }
-        CGRect indicatorFrame = CGRectFlatMake(stepIndicatorMinX, CGRectGetMinY(trackRect) + CGFloatGetCenter(CGRectGetHeight(trackRect), obj.indicatorSize.height), obj.indicatorSize.width, obj.indicatorSize.height);
-        stepIndicatorMinX = CGRectGetMaxX(indicatorFrame) + stepMargin;
-        
+        // 每个刻度与其档位的系统圆点中心一致，自动适应圆点图片尺寸、布局方向和系统内边距。
+        CGRect thumbRect = [self thumbRectForBounds:self.bounds trackRect:trackRect value:[self qmuisl_valueForStep:idx]];
         CGSize stepControlSize = [obj sizeThatFits:CGSizeMax];
-        obj.frame = CGRectFlatMake(CGRectGetMinX(indicatorFrame) - (stepControlSize.width - CGRectGetWidth(indicatorFrame)) / 2, CGRectGetMaxY(indicatorFrame) - stepControlSize.height, stepControlSize.width, stepControlSize.height);
+        obj.frame = CGRectMake(CGRectGetMidX(thumbRect) - stepControlSize.width / 2, CGRectGetMidY(thumbRect) + obj.indicatorSize.height / 2 - stepControlSize.height, stepControlSize.width, stepControlSize.height);
     }];
 }
 
@@ -413,7 +623,6 @@ static char kAssociatedObjectKey_stepControlConfiguration;
 }
 
 - (void)qmuisl_setNeedsLayout {
-    self.qmuisl_layoutCachedKey = nil;
     [self setNeedsLayout];
 }
 

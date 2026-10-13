@@ -71,7 +71,7 @@
     button.highlightedBackgroundColor = TableViewCellSelectedBackgroundColor;
     button.qmui_borderColor = TableViewSeparatorColor;
     button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-    button.contentEdgeInsets = UIEdgeInsetsMake(0, 16, 0, 0);
+    button.qmui_contentInsets = UIEdgeInsetsMake(0, 16, 0, 0);
     button.qmui_automaticallyAdjustTouchHighlightedInScrollView = YES;
     return button;
 }

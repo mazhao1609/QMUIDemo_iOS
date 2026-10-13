@@ -179,7 +179,7 @@
         if (actionView.on) {
             QMUIButton *button = [[QMUIButton alloc] qmui_initWithImage:[UIImageMake(@"icon_nav_about") imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] title:@"其他"];
             button.titleLabel.font = UIFontMake(16);
-            button.contentEdgeInsets = UIEdgeInsetsMake(8, weakMenu.padding.left, 8, weakMenu.padding.right);
+            button.qmui_contentInsets = UIEdgeInsetsMake(8, weakMenu.padding.left, 8, weakMenu.padding.right);
             button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
             button.spacingBetweenImageAndTitle = 12;
             button.highlightedBackgroundColor = TableViewCellSelectedBackgroundColor;

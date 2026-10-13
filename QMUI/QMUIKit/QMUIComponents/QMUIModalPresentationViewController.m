@@ -271,10 +271,10 @@
         
         if (self.shownInWindowMode) {
             // 恢复 keyWindow 之前做一下检查，避免这个问题 https://github.com/Tencent/QMUI_iOS/issues/90
-            if (UIApplication.sharedApplication.keyWindow == self.window) {
+            if (QMUIHelper.keyWindow == self.window) {
                 if (self.previousKeyWindow.hidden) {
                     // 保护了这个 issue 记录的情况，避免主 window 丢失 keyWindow https://github.com/Tencent/QMUI_iOS/issues/315
-                    [UIApplication.sharedApplication.delegate.window makeKeyWindow];
+                    [QMUIHelper.mainWindow makeKeyWindow];
                 } else {
                     [self.previousKeyWindow makeKeyWindow];
                 }
@@ -505,9 +505,11 @@
     // makeKeyAndVisible 导致的 viewWillAppear: 必定 animated 是 NO 的，所以这里用额外的变量保存这个 animated 的值
     self.appearAnimated = animated;
     self.appearCompletionBlock = completion;
-    self.previousKeyWindow = UIApplication.sharedApplication.keyWindow;
+    self.previousKeyWindow = QMUIHelper.keyWindow;
     if (!self.window) {
-        self.window = [[QMUIModalPresentationWindow alloc] init];
+        // 浮层继承宿主场景，避免 Scene 生命周期下窗口无法显示或旋转。
+        UIWindowScene *scene = self.previousKeyWindow.windowScene ?: QMUIHelper.mainWindow.windowScene;
+        self.window = scene ? [[QMUIModalPresentationWindow alloc] initWithWindowScene:scene] : [[QMUIModalPresentationWindow alloc] initWithFrame:QMUIHelper.screen.bounds];
         self.window.windowLevel = UIWindowLevelQMUIAlertView;
         self.window.backgroundColor = UIColorClear;// 避免横竖屏旋转时出现黑色
         [self updateWindowStatusBarCapture];
@@ -751,7 +753,7 @@
 @implementation QMUIModalPresentationViewController (Manager)
 
 + (BOOL)isAnyModalPresentationViewControllerVisible {
-    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+    for (UIWindow *window in QMUIHelper.applicationWindows) {
         if ([window isKindOfClass:[QMUIModalPresentationWindow class]] && !window.hidden) {
             return YES;
         }
@@ -763,7 +765,7 @@
     
     BOOL hideAllFinally = YES;
     
-    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+    for (UIWindow *window in QMUIHelper.applicationWindows) {
         if (![window isKindOfClass:[QMUIModalPresentationWindow class]]) {
             continue;
         }

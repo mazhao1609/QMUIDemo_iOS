@@ -531,6 +531,8 @@ static NSUInteger alertControllerCount = 0;
 - (void)viewDidLayoutSubviews {
     
     [super viewDidLayoutSubviews];
+    // 弹窗可能被展示到任意 Scene，布局时读取当前 view 的安全区，避免多窗口间串用全局窗口。
+    UIEdgeInsets safeAreaInsets = SafeAreaInsetsForView(self.view);
     
     BOOL hasTitle = (self.titleLabel.text.length > 0 && !self.titleLabel.hidden);
     BOOL hasMessage = (self.messageLabel.text.length > 0 && !self.messageLabel.hidden);
@@ -631,7 +633,7 @@ static NSUInteger alertControllerCount = 0;
         self.buttonScrollView.contentSize = CGSizeMake(CGRectGetWidth(self.buttonScrollView.bounds), contentOriginY);
         // 容器最后布局
         CGFloat contentHeight = CGRectGetHeight(self.headerScrollView.bounds) + CGRectGetHeight(self.buttonScrollView.bounds);
-        CGFloat screenSpaceHeight = CGRectGetHeight(self.view.bounds) - UIEdgeInsetsGetVerticalValue(SafeAreaInsetsConstantForDeviceWithNotch) - self.keyboardHeight;
+        CGFloat screenSpaceHeight = CGRectGetHeight(self.view.bounds) - UIEdgeInsetsGetVerticalValue(safeAreaInsets) - self.keyboardHeight;
         if (contentHeight > screenSpaceHeight - 20) {
             screenSpaceHeight -= 20;
             CGFloat contentH = fmin(CGRectGetHeight(self.headerScrollView.bounds), screenSpaceHeight / 2);
@@ -655,7 +657,7 @@ static NSUInteger alertControllerCount = 0;
         self.scrollWrapView.frame =  CGRectMake(0, 0, CGRectGetWidth(self.scrollWrapView.bounds), contentHeight);
         self.mainVisualEffectView.frame = self.scrollWrapView.bounds;
         
-        self.containerView.qmui_frameApplyTransform = CGRectMake((CGRectGetWidth(self.view.bounds) - CGRectGetWidth(self.containerView.frame)) / 2, SafeAreaInsetsConstantForDeviceWithNotch.top + (screenSpaceHeight - contentHeight) / 2, CGRectGetWidth(self.containerView.frame), CGRectGetHeight(self.scrollWrapView.bounds));
+        self.containerView.qmui_frameApplyTransform = CGRectMake((CGRectGetWidth(self.view.bounds) - CGRectGetWidth(self.containerView.frame)) / 2, safeAreaInsets.top + (screenSpaceHeight - contentHeight) / 2, CGRectGetWidth(self.containerView.frame), CGRectGetHeight(self.scrollWrapView.bounds));
     }
     
     else if (self.preferredStyle == QMUIAlertControllerStyleActionSheet) {
@@ -759,7 +761,7 @@ static NSUInteger alertControllerCount = 0;
         }
         // 把上下的margin都加上用于跟整个屏幕的高度做比较
         CGFloat contentHeight = contentOriginY + UIEdgeInsetsGetVerticalValue(self.sheetContentMargin);
-        CGFloat screenSpaceHeight = CGRectGetHeight(self.view.bounds) - SafeAreaInsetsConstantForDeviceWithNotch.top - (self.isExtendBottomLayout ? 0 : SafeAreaInsetsConstantForDeviceWithNotch.bottom);
+        CGFloat screenSpaceHeight = CGRectGetHeight(self.view.bounds) - safeAreaInsets.top - (self.isExtendBottomLayout ? 0 : safeAreaInsets.bottom);
         if (contentHeight > screenSpaceHeight) {
             CGFloat cancelButtonAreaHeight = (self.cancelAction ? (CGRectGetHeight(self.cancelAction.button.bounds) + self.sheetCancelButtonMarginTop) : 0);
             screenSpaceHeight = screenSpaceHeight - cancelButtonAreaHeight - UIEdgeInsetsGetVerticalValue(self.sheetContentMargin);
@@ -789,9 +791,9 @@ static NSUInteger alertControllerCount = 0;
             contentHeight -= self.sheetContentMargin.top;
         }
         
-        self.containerView.qmui_frameApplyTransform = CGRectMake((CGRectGetWidth(self.view.bounds) - CGRectGetWidth(self.containerView.frame)) / 2, SafeAreaInsetsConstantForDeviceWithNotch.top + screenSpaceHeight - contentHeight, CGRectGetWidth(self.containerView.frame), contentHeight + (self.isExtendBottomLayout ? SafeAreaInsetsConstantForDeviceWithNotch.bottom : 0));
+        self.containerView.qmui_frameApplyTransform = CGRectMake((CGRectGetWidth(self.view.bounds) - CGRectGetWidth(self.containerView.frame)) / 2, safeAreaInsets.top + screenSpaceHeight - contentHeight, CGRectGetWidth(self.containerView.frame), contentHeight + (self.isExtendBottomLayout ? safeAreaInsets.bottom : 0));
         
-        self.extendLayer.frame = CGRectFlatMake(0, CGRectGetHeight(self.containerView.bounds) - SafeAreaInsetsConstantForDeviceWithNotch.bottom - 1, CGRectGetWidth(self.containerView.bounds), SafeAreaInsetsConstantForDeviceWithNotch.bottom + 1);
+        self.extendLayer.frame = CGRectFlatMake(0, CGRectGetHeight(self.containerView.bounds) - safeAreaInsets.bottom - 1, CGRectGetWidth(self.containerView.bounds), safeAreaInsets.bottom + 1);
     }
 }
 

@@ -43,6 +43,13 @@ extern const CGFloat QMUIButtonCornerRadiusAdjustsBounds;
  */
 @interface QMUIButton : UIButton
 
+/// 自定义布局的内容、标题与图片内边距，替代 UIKit 已废弃的 EdgeInsets 属性。
+/// 旧 contentEdgeInsets / titleEdgeInsets / imageEdgeInsets 仍转发到这些属性。
+/// 使用 UIButtonConfiguration 时由系统布局，以上内边距仅用于 QMUI 自定义布局。
+@property(nonatomic, assign) UIEdgeInsets qmui_contentInsets;
+@property(nonatomic, assign) UIEdgeInsets qmui_titleInsets;
+@property(nonatomic, assign) UIEdgeInsets qmui_imageInsets;
+
 /**
  *  子类继承时重写的方法，一般不建议重写 initWithXxx
  */

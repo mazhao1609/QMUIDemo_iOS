@@ -99,7 +99,7 @@ static char kAssociatedObjectKey_canResignKeyWindowBlock;
                     }
                     
                     BeginIgnoreDeprecatedWarning
-                    UIWindow *keyWindow = UIApplication.sharedApplication.keyWindow;
+                    UIWindow *keyWindow = selfObject.windowScene.keyWindow ?: QMUIHelper.keyWindow;
                     if (result && keyWindow && keyWindow != selfObject && keyWindow.qmui_canResignKeyWindowBlock) {
                         result = keyWindow.qmui_canResignKeyWindowBlock(keyWindow, selfObject);
                     }

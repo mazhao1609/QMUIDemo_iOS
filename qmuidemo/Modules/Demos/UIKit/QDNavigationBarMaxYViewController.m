@@ -44,20 +44,25 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 主动在转场过程中触发布局的重新运算
-    [self.view setNeedsLayout];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.view setNeedsLayout];
-    });
+    [self updateLayoutAlongsideNavigationTransition];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // 主动在转场过程中触发布局的重新运算
+    [self updateLayoutAlongsideNavigationTransition];
+}
+
+- (void)updateLayoutAlongsideNavigationTransition {
+    // 与系统转场同步刷新；结束或交互取消时再校正，不等待固定的一秒定时器。
     [self.view setNeedsLayout];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.view setNeedsLayout];
-    });
+    __weak __typeof(self) weakSelf = self;
+    [self qmui_animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [weakSelf.view setNeedsLayout];
+        [weakSelf.view layoutIfNeeded];
+    } completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [weakSelf.view setNeedsLayout];
+        [weakSelf.view layoutIfNeeded];
+    }];
 }
 
 - (void)initSubviews {

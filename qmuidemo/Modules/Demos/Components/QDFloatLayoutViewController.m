@@ -30,7 +30,7 @@
         QMUIButton *button = [QDUIHelper generateGhostButtonWithColor:UIColor.qd_tintColor];
         [button setTitle:suggestions[i] forState:UIControlStateNormal];
         button.titleLabel.font = UIFontMake(14);
-        button.contentEdgeInsets = UIEdgeInsetsMake(6, 20, 6, 20);
+        button.qmui_contentInsets = UIEdgeInsetsMake(6, 20, 6, 20);
         [self.floatLayoutView addSubview:button];
     }
 }

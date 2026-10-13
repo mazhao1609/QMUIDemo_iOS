@@ -20,7 +20,7 @@
 - (void)initSubviews {
     [super initSubviews];
     self.presentButton = [QDUIHelper generateLightBorderedButton];
-    self.presentButton.contentEdgeInsets = UIEdgeInsetsMake(8, 20, 8, 20);
+    self.presentButton.qmui_contentInsets = UIEdgeInsetsMake(8, 20, 8, 20);
     [self.presentButton setTitle:@"点击打开 Debug 面板" forState:UIControlStateNormal];
     self.presentButton.spacingBetweenImageAndTitle = 4;
     [self.presentButton addTarget:self action:@selector(handlePresentButtonEvent) forControlEvents:UIControlEventTouchUpInside];

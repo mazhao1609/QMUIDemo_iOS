@@ -36,10 +36,23 @@ QMUISynthesizeCGFloatProperty(qmui_originCornerRadius, setQmui_originCornerRadiu
         
         // 由于其他方法需要通过调用 qmuilayer_setCornerRadius: 来执行 swizzle 前的实现，所以这里暂时用 ExchangeImplementations
         ExchangeImplementations([CALayer class], @selector(setCornerRadius:), @selector(qmuilayer_setCornerRadius:));
+
+        // 使用公开 maskedCorners 修改圆角时，同步刷新 QMUI 的边框路径。
+        OverrideImplementation(CALayer.class, @selector(setMaskedCorners:), ^id(__unsafe_unretained Class cls, SEL selector, IMP (^provider)(void)) {
+            return ^(CALayer *layer, CACornerMask corners) {
+                BOOL changed = layer.maskedCorners != corners;
+                void (*original)(id, SEL, CACornerMask) = (void (*)(id, SEL, CACornerMask))provider();
+                original(layer, selector, corners);
+                if (changed && [layer.delegate isKindOfClass:UIView.class]) {
+                    UIView *view = (UIView *)layer.delegate;
+                    if (view.qmui_borderPosition > 0 && view.qmui_borderWidth > 0) [view.qmui_borderLayer setNeedsLayout];
+                }
+            };
+        });
         
         ExtendImplementationOfNonVoidMethodWithoutArguments([CALayer class], @selector(init), CALayer *, ^CALayer *(CALayer *selfObject, CALayer *originReturnValue) {
             selfObject.qmui_speedBeforePause = selfObject.speed;
-            selfObject.qmui_maskedCorners = QMUILayerAllCorner;
+            selfObject.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
             return originReturnValue;
         });
         
@@ -125,24 +138,13 @@ static char kAssociatedObjectKey_pause;
     return [((NSNumber *)objc_getAssociatedObject(self, &kAssociatedObjectKey_pause)) boolValue];
 }
 
-static char kAssociatedObjectKey_maskedCorners;
 - (void)setQmui_maskedCorners:(QMUICornerMask)qmui_maskedCorners {
-    BOOL maskedCornersChanged = qmui_maskedCorners != self.qmui_maskedCorners;
-    objc_setAssociatedObject(self, &kAssociatedObjectKey_maskedCorners, @(qmui_maskedCorners), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // 旧接口仅作为公开系统属性的兼容转发。
     self.maskedCorners = (CACornerMask)qmui_maskedCorners;
-    if (maskedCornersChanged) {
-        // 需要刷新border
-        if ([self.delegate respondsToSelector:@selector(layoutSublayersOfLayer:)]) {
-            UIView *view = (UIView *)self.delegate;
-            if (view.qmui_borderPosition > 0 && view.qmui_borderWidth > 0) {
-                [view.qmui_borderLayer setNeedsLayout];// 直接调用 layer 的 setNeedsLayout，没有线程限制，如果通过 view 调用则需要在主线程才行
-            }
-        }
-    }
 }
 
 - (QMUICornerMask)qmui_maskedCorners {
-    return [objc_getAssociatedObject(self, &kAssociatedObjectKey_maskedCorners) unsignedIntegerValue];
+    return (QMUICornerMask)self.maskedCorners;
 }
 
 static char kAssociatedObjectKey_shadow;

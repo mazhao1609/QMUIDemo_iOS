@@ -22,13 +22,12 @@ NS_ASSUME_NONNULL_BEGIN
 @required
 @property(nonatomic, assign) BOOL qmuibar_hasSetEffect;
 @property(nonatomic, assign) BOOL qmuibar_hasSetEffectForegroundColor;
-@property(nonatomic, strong, readonly, nullable) NSArray<UIVisualEffect *> *qmuibar_backgroundEffects;
 - (void)qmuibar_updateEffect;
 @end
 
 @interface QMUIBarProtocolPrivate : NSObject
 
-+ (void)swizzleBarBackgroundViewIfNeeded;
+
 @end
 
 NS_ASSUME_NONNULL_END

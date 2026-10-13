@@ -20,7 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface UINavigationBar (QMUI)
 
 /**
- UINavigationBar 在 iOS 11 下所有的 item 都会由 contentView 管理，只要在 UINavigationController init 完成后就能拿到 qmui_contentView 的值
+ 导航栏内管理标题和按钮的内容容器。通过实际视图树查找，不依赖私有 KVC。
+ 尚未创建内容容器或系统改变内部结构时返回 nil，调用方应允许为空。
  */
 @property(nonatomic, strong, readonly, nullable) UIView *qmui_contentView;
 

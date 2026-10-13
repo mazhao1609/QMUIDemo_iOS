@@ -137,7 +137,7 @@ NSString *const QMUIThemeDidChangeNotification = @"QMUIThemeDidChangeNotificatio
 - (void)notifyThemeChanged {
     [[NSNotificationCenter defaultCenter] postNotificationName:QMUIThemeDidChangeNotification object:self];
     
-    [UIApplication.sharedApplication.windows enumerateObjectsUsingBlock:^(__kindof UIWindow * _Nonnull window, NSUInteger idx, BOOL * _Nonnull stop) {
+    [QMUIHelper.applicationWindows enumerateObjectsUsingBlock:^(__kindof UIWindow * _Nonnull window, NSUInteger idx, BOOL * _Nonnull stop) {
         if (!window.hidden && window.alpha > 0.01 && window.rootViewController) {
             [window.rootViewController qmui_themeDidChangeByManager:self identifier:self.currentThemeIdentifier theme:self.currentTheme];
             
